@@ -2,25 +2,13 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#pragma mark - 独立悬浮Window（点击穿透）
-@interface FloatingOverlayWindow : UIWindow
-@end
-@implementation FloatingOverlayWindow
-- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    // 只有点击在子视图上时才响应，否则穿透到下层App
-    for (UIView *subview in self.subviews) {
-        if (!subview.hidden && CGRectContainsPoint(subview.frame, point)) {
-            UIView *hit = [subview hitTest:point withEvent:event];
-            if (hit) return hit;
-        }
+// 获取keyWindow
+static UIWindow *getKeyWindow(void) {
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        if (w.isKeyWindow && !w.isHidden) return w;
     }
-    return nil;
+    return [UIApplication sharedApplication].keyWindow;
 }
-- (BOOL)_canAffectStatusBarAppearance { return NO; }
-@end
-
-// 全局悬浮Window
-static FloatingOverlayWindow *g_overlayWindow = nil;
 
 // 配置存储 key
 static NSString *const kConfigText1 = @"SFM_configText1";
@@ -156,11 +144,13 @@ static void simulateTapAtPoint(CGPoint point) {
 
 static void ensureDebugOverlay(void) {
     if (g_debugOverlay) return;
-    if (!g_overlayWindow) return;
-    g_debugOverlay = [[UIView alloc] initWithFrame:g_overlayWindow.bounds];
+    UIWindow *keyWindow = getKeyWindow();
+    if (!keyWindow) return;
+    g_debugOverlay = [[UIView alloc] initWithFrame:keyWindow.bounds];
     g_debugOverlay.backgroundColor = [UIColor clearColor];
     g_debugOverlay.userInteractionEnabled = NO;
-    [g_overlayWindow addSubview:g_debugOverlay];
+    [keyWindow addSubview:g_debugOverlay];
+    [keyWindow bringSubviewToFront:g_debugOverlay];
 }
 
 static void showDebugRect(CGRect frame) {
@@ -474,7 +464,7 @@ static UIView *createSecondaryView(void) {
         // 1毫秒间隔快速扫描点击
         if (g_scanTimer) dispatch_source_cancel(g_scanTimer);
         g_scanTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-        dispatch_source_set_timer(g_scanTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.001 * NSEC_PER_SEC, 0);
+        dispatch_source_set_timer(g_scanTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.01 * NSEC_PER_SEC, 0);
         dispatch_source_set_event_handler(g_scanTimer, ^{
             scanAndClick();
         });
@@ -583,25 +573,21 @@ static UIView *createSecondaryView(void) {
 static void installFloatMenu(void) {
     if (g_floatMenu) return;
     
-    // 创建独立悬浮Window（最高层级，点击穿透）
-    if (!g_overlayWindow) {
-        g_overlayWindow = [[FloatingOverlayWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-        g_overlayWindow.windowLevel = UIWindowLevelAlert + 100;
-        g_overlayWindow.hidden = NO;
-        g_overlayWindow.backgroundColor = [UIColor clearColor];
-        g_overlayWindow.rootViewController = [[UIViewController alloc] init];
-    }
+    UIWindow *keyWindow = getKeyWindow();
+    if (!keyWindow) return;
     
-    CGSize screenSize = [UIScreen mainScreen].bounds.size;
+    CGSize screenSize = keyWindow.bounds.size;
     
     // 创建一级菜单
     g_floatMenu = createFloatMenu();
     g_floatMenu.center = CGPointMake(screenSize.width - 35, 150);
-    [g_overlayWindow addSubview:g_floatMenu];
+    [keyWindow addSubview:g_floatMenu];
+    [keyWindow bringSubviewToFront:g_floatMenu];
     
     // 创建二级菜单
     g_secondaryView = createSecondaryView();
-    [g_overlayWindow addSubview:g_secondaryView];
+    [keyWindow addSubview:g_secondaryView];
+    [keyWindow bringSubviewToFront:g_secondaryView];
     
     // 执行按钮点击（用UIButton，更可靠）
     [g_execBtn addTarget:[SFMHandler class] action:@selector(execBtnTapped:) forControlEvents:UIControlEventTouchUpInside];
@@ -639,7 +625,7 @@ static void installFloatMenu(void) {
         [g_execBtn setTitle:@"▶️" forState:UIControlStateNormal];
         g_execBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.2 alpha:0.5];
         g_scanTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-        dispatch_source_set_timer(g_scanTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.001 * NSEC_PER_SEC, 0);
+        dispatch_source_set_timer(g_scanTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.01 * NSEC_PER_SEC, 0);
         dispatch_source_set_event_handler(g_scanTimer, ^{
             scanAndClick();
         });
@@ -651,7 +637,7 @@ static void installFloatMenu(void) {
     // 启动自动收纳计时
     resetHideTimer();
     
-    NSLog(@"[SFM] 悬浮菜单已安装（独立Window）");
+    NSLog(@"[SFM] 悬浮菜单已安装（keyWindow方式）");
 }
 
 #pragma mark - Hook
