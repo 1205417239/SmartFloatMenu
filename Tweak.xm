@@ -55,17 +55,18 @@ static BOOL isOrangeColor(UIColor *color) {
     if (!color) return NO;
     CGFloat r, g, b, a;
     [color getRed:&r green:&g blue:&b alpha:&a];
-    // 橙色：红色高，绿色中等，蓝色低
-    return r > 0.7 && g > 0.35 && g < 0.75 && b < 0.35;
+    // 橙色：R高(>0.7)，G中等(0.3-0.5)，B低(<0.4)，R明显高于G
+    return r > 0.7 && g > 0.28 && g < 0.52 && b < 0.42 && (r - g) > 0.25;
 }
 
 static BOOL isGrayColor(UIColor *color) {
     if (!color) return NO;
     CGFloat r, g, b, a;
     [color getRed:&r green:&g blue:&b alpha:&a];
-    // 灰色：红绿蓝相近
+    // 灰色：红绿蓝相近(diff<0.12)，亮度中等(0.4-0.8)
     CGFloat diff = fabs(r-g) + fabs(g-b) + fabs(r-b);
-    return diff < 0.2 && r < 0.8;
+    CGFloat brightness = (r + g + b) / 3.0;
+    return diff < 0.12 && brightness > 0.35 && brightness < 0.85;
 }
 
 // 截图获取指定位置的像素颜色
@@ -136,57 +137,52 @@ static void scanAndClick(void) {
     
     if ((!targetText1 || targetText1.length == 0) && (!targetText2 || targetText2.length == 0)) return;
     
-    UIWindow *keyWindow = nil;
-    for (UIWindow *w in [UIApplication sharedApplication].windows) {
-        if (w.isKeyWindow && !w.isHidden) { keyWindow = w; break; }
-    }
-    if (!keyWindow) return;
-    
-    NSMutableArray *queue = [NSMutableArray arrayWithArray:keyWindow.subviews];
-    while (queue.count > 0) {
-        UIView *view = queue.firstObject;
-        [queue removeObjectAtIndex:0];
+    // 遍历所有窗口，确保滚动后也能识别
+    NSArray *windows = [UIApplication sharedApplication].windows;
+    for (UIWindow *keyWindow in windows) {
+        if (keyWindow.hidden || keyWindow.alpha < 0.1) continue;
         
-        if ([view isKindOfClass:[UILabel class]]) {
-            UILabel *label = (UILabel *)view;
-            if (label.text && !label.hidden && label.alpha > 0.1) {
-                BOOL match = NO;
-                if (targetText1 && targetText1.length > 0 && [label.text containsString:targetText1]) match = YES;
-                if (targetText2 && targetText2.length > 0 && [label.text containsString:targetText2]) match = YES;
-                
-                if (match) {
-                    // 获取label在屏幕上的位置
-                    CGRect labelFrame = [label convertRect:label.bounds toView:nil];
+        NSMutableArray *queue = [NSMutableArray arrayWithArray:keyWindow.subviews];
+        while (queue.count > 0) {
+            UIView *view = queue.firstObject;
+            [queue removeObjectAtIndex:0];
+            
+            if ([view isKindOfClass:[UILabel class]]) {
+                UILabel *label = (UILabel *)view;
+                if (label.text && !label.hidden && label.alpha > 0.1) {
+                    BOOL match = NO;
+                    if (targetText1 && targetText1.length > 0 && [label.text containsString:targetText1]) match = YES;
+                    if (targetText2 && targetText2.length > 0 && [label.text containsString:targetText2]) match = YES;
                     
-                    // 检查文字下面一个身位的颜色
-                    CGFloat bodyHeight = labelFrame.size.height;
-                    CGFloat checkX = labelFrame.origin.x + labelFrame.size.width / 2;
-                    CGFloat checkY = labelFrame.origin.y + labelFrame.size.height + bodyHeight;
-                    CGPoint checkPoint = CGPointMake(checkX, checkY);
-                    
-                    UIColor *color = getColorAtPoint(checkPoint);
-                    
-                    if (isOrangeColor(color)) {
-                        // 橙色，点击文字下面一个身位
-                        CGPoint tapPoint = checkPoint;
-                        NSLog(@"[SFM] 匹配文字:%@ 下方检测到橙色，点击位置:%@", label.text, NSStringFromCGPoint(tapPoint));
-                        simulateTapAtPoint(tapPoint);
-                        return;  // 每次只点第一个橙色匹配
-                    } else if (isGrayColor(color)) {
-                        // 灰色，跳过，继续找下一个
-                        NSLog(@"[SFM] 匹配文字:%@ 下方检测到灰色，跳过", label.text);
-                    } else {
-                        // 其它颜色
-                        CGFloat r,g,b,a;
-                        [color getRed:&r green:&g blue:&b alpha:&a];
-                        NSLog(@"[SFM] 匹配文字:%@ 下方其它颜色:%.2f %.2f %.2f", label.text, r, g, b);
+                    if (match) {
+                        // 获取label在屏幕上的位置
+                        CGRect labelFrame = [label convertRect:label.bounds toView:nil];
+                        
+                        // 检查文字下面一个身位的颜色
+                        CGFloat bodyHeight = labelFrame.size.height;
+                        CGFloat checkX = labelFrame.origin.x + labelFrame.size.width / 2;
+                        CGFloat checkY = labelFrame.origin.y + labelFrame.size.height + bodyHeight;
+                        CGPoint checkPoint = CGPointMake(checkX, checkY);
+                        
+                        UIColor *color = getColorAtPoint(checkPoint);
+                        
+                        if (isOrangeColor(color)) {
+                            // 橙色，点击文字下面一个身位
+                            CGPoint tapPoint = checkPoint;
+                            NSLog(@"[SFM] 匹配文字:%@ 下方检测到橙色，点击位置:%@", label.text, NSStringFromCGPoint(tapPoint));
+                            simulateTapAtPoint(tapPoint);
+                            return;  // 每次只点第一个橙色匹配
+                        } else if (isGrayColor(color)) {
+                            // 灰色，跳过，继续找下一个
+                            NSLog(@"[SFM] 匹配文字:%@ 下方检测到灰色，跳过", label.text);
+                        }
                     }
                 }
             }
-        }
-        
-        for (UIView *sub in view.subviews) {
-            [queue addObject:sub];
+            
+            for (UIView *sub in view.subviews) {
+                [queue addObject:sub];
+            }
         }
     }
 }
