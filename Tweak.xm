@@ -1,5 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
+#import <Vision/Vision.h>
 
 #pragma mark - 日志功能
 static NSMutableString *g_logString = nil;
@@ -162,38 +163,113 @@ static void clearDebugMarks(void) {
     if (g_debugTapDot) g_debugTapDot.hidden = YES;
 }
 
-#pragma mark - 识字辨色点击（纯颜色识别版，适配Unity游戏）
+#pragma mark - 截图全屏
+static UIImage *captureFullScreen(void) {
+    UIWindow *keyWindow = getKeyWindow();
+    if (!keyWindow) return nil;
+    UIGraphicsBeginImageContext(keyWindow.bounds.size);
+    [keyWindow drawViewHierarchyInRect:keyWindow.bounds afterScreenUpdates:NO];
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return image;
+}
+
+#pragma mark - 识字辨色点击（Vision OCR版，适配Unity游戏）
 static int g_scanCount = 0;
+static BOOL g_isScanning = NO;
 static void scanAndClick(void) {
     if (!g_isExecuting) return;
+    if (g_isScanning) return; // 防止重复扫描
+    g_isScanning = YES;
     g_scanCount++;
     
-    UIWindow *keyWindow = getKeyWindow();
-    if (!keyWindow) return;
+    NSString *targetText1 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText1];
+    NSString *targetText2 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText2];
+    if ((!targetText1 || targetText1.length == 0) && (!targetText2 || targetText2.length == 0)) {
+        g_isScanning = NO;
+        return;
+    }
     
-    CGSize screenSize = keyWindow.bounds.size;
-    CGFloat step = 15; // 每隔15像素采样一次
+    // 截取全屏
+    UIImage *screenshot = captureFullScreen();
+    if (!screenshot) {
+        g_isScanning = NO;
+        return;
+    }
     
-    // 遍历屏幕找橙色区域
-    for (CGFloat y = 80; y < screenSize.height - 80; y += step) {
-        for (CGFloat x = 40; x < screenSize.width - 40; x += step) {
-            CGPoint point = CGPointMake(x, y);
-            UIColor *color = getColorAtPoint(point);
-            if (isOrangeColor(color)) {
-                // 找到橙色区域，显示调试标记并点击
-                showDebugRect(CGRectMake(x - 15, y - 15, 30, 30));
-                showDebugTapDot(point);
-                simulateTapAtPoint(point);
-                SFMLog(@"扫描 #%d: 找到橙色区域，点击: (%.0f, %.0f)", g_scanCount, x, y);
+    // 用Vision框架OCR识别文字
+    VNRecognizeTextRequest *request = [[VNRecognizeTextRequest alloc] initWithCompletionHandler:^(VNRequest *request, NSError *error) {
+        if (error) {
+            SFMLog(@"扫描 #%d: OCR错误: %@", g_scanCount, error.localizedDescription);
+            g_isScanning = NO;
+            return;
+        }
+        
+        NSArray *results = request.results;
+        if (!results || results.count == 0) {
+            if (g_scanCount % 20 == 0) {
+                SFMLog(@"扫描 #%d: 未识别到文字", g_scanCount);
+            }
+            g_isScanning = NO;
+            return;
+        }
+        
+        // 遍历识别结果，找目标文字
+        for (VNRecognizedTextObservation *observation in results) {
+            if (observation.topCandidates.count == 0) continue;
+            NSString *recognizedText = observation.topCandidates[0].string;
+            if (!recognizedText) continue;
+            
+            BOOL match = NO;
+            if (targetText1 && targetText1.length > 0 && [recognizedText containsString:targetText1]) match = YES;
+            if (targetText2 && targetText2.length > 0 && [recognizedText containsString:targetText2]) match = YES;
+            
+            if (match) {
+                // 获取文字位置（Vision的坐标是归一化的，需要转换）
+                CGRect boundingBox = observation.boundingBox;
+                CGSize imageSize = screenshot.size;
+                CGFloat x = boundingBox.origin.x * imageSize.width;
+                CGFloat y = (1 - boundingBox.origin.y - boundingBox.size.height) * imageSize.height;
+                CGFloat width = boundingBox.size.width * imageSize.width;
+                CGFloat height = boundingBox.size.height * imageSize.height;
+                CGRect textFrame = CGRectMake(x, y, width, height);
+                
+                showDebugRect(CGRectMake(textFrame.origin.x - 5, textFrame.origin.y - 5, textFrame.size.width + 10, textFrame.size.height + 10));
+                SFMLog(@"扫描 #%d: 匹配文字: '%@'，位置: (%.0f, %.0f)，大小: %.0fx%.0f", g_scanCount, recognizedText, textFrame.origin.x, textFrame.origin.y, textFrame.size.width, textFrame.size.height);
+                
+                // 检查文字下方一个身位的颜色
+                CGFloat checkX = textFrame.origin.x + textFrame.size.width / 2;
+                CGFloat checkY = textFrame.origin.y + textFrame.size.height + height;
+                CGPoint checkPoint = CGPointMake(checkX, checkY);
+                UIColor *color = getColorAtPoint(checkPoint);
+                CGFloat r, g, b, a;
+                [color getRed:&r green:&g blue:&b alpha:&a];
+                SFMLog(@"  检查点: (%.0f, %.0f)，颜色: R:%.2f G:%.2f B:%.2f，是橙色: %d", checkPoint.x, checkPoint.y, r, g, b, isOrangeColor(color));
+                
+                if (isOrangeColor(color)) {
+                    showDebugTapDot(checkPoint);
+                    simulateTapAtPoint(checkPoint);
+                    SFMLog(@"  执行点击: (%.0f, %.0f)", checkPoint.x, checkPoint.y);
+                }
+                g_isScanning = NO;
                 return;
             }
         }
-    }
+        
+        if (g_scanCount % 20 == 0) {
+            SFMLog(@"扫描 #%d: 识别到 %lu 个文字，未匹配目标", g_scanCount, (unsigned long)results.count);
+        }
+        g_isScanning = NO;
+    }];
     
-    // 每50次扫描记录一次（避免日志过多）
-    if (g_scanCount % 50 == 0) {
-        SFMLog(@"扫描 #%d: 未找到橙色区域", g_scanCount);
-    }
+    request.recognitionLevel = VNRequestTextRecognitionLevelFast; // 快速识别
+    request.usesLanguageCorrection = NO; // 不使用语言校正，提高速度
+    
+    // 执行识别
+    VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:screenshot.CGImage options:@{}];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [handler performRequests:@[request] error:nil];
+    });
 }
 
 #pragma mark - 事件处理
@@ -254,7 +330,29 @@ static void scanAndClick(void) {
     }
     SFMLog(@"显示设置框");
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"颜色识别设置" message:@"纯颜色识别模式（适配Unity游戏）\n自动识别屏幕上的橙色区域并点击" preferredStyle:UIAlertControllerStyleAlert];
+    NSString *saved1 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText1] ?: @"";
+    NSString *saved2 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText2] ?: @"";
+    
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"识别文字设置" message:@"OCR识别屏幕文字（适配Unity游戏）\n下方橙色则自动点击" preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"识别文字1";
+        textField.text = saved1;
+    }];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"识别文字2";
+        textField.text = saved2;
+    }];
+    
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        NSString *text1 = alert.textFields[0].text;
+        NSString *text2 = alert.textFields[1].text;
+        [[NSUserDefaults standardUserDefaults] setObject:text1 forKey:kConfigText1];
+        [[NSUserDefaults standardUserDefaults] setObject:text2 forKey:kConfigText2];
+        [[NSUserDefaults standardUserDefaults] synchronize];
+        SFMLog(@"保存设置: text1=%@, text2=%@", text1, text2);
+    }];
     
     UIAlertAction *exportLogAction = [UIAlertAction actionWithTitle:@"导出日志" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         SFMLog(@"用户点击导出日志");
@@ -271,6 +369,7 @@ static void scanAndClick(void) {
     
     UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil];
     
+    [alert addAction:saveAction];
     [alert addAction:exportLogAction];
     [alert addAction:cancelAction];
     
