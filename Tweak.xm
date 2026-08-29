@@ -265,9 +265,16 @@ static void installFloatButton(void) {
     if (g_floatBtn) return;
     
     UIWindow *keyWindow = getKeyWindow();
-    if (!keyWindow) return;
+    if (!keyWindow) {
+        NSLog(@"[SFM] keyWindow 为 nil，1秒后重试");
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            installFloatButton();
+        });
+        return;
+    }
     
     CGSize screenSize = keyWindow.bounds.size;
+    NSLog(@"[SFM] 屏幕尺寸: %.0fx%.0f, window数量: %lu", screenSize.width, screenSize.height, (unsigned long)[UIApplication sharedApplication].windows.count);
     
     // 创建悬浮按钮
     g_floatBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -293,24 +300,22 @@ static void installFloatButton(void) {
     [keyWindow addSubview:g_floatBtn];
     [keyWindow bringSubviewToFront:g_floatBtn];
     
-    NSLog(@"[SFM] 悬浮按钮已安装");
+    NSLog(@"[SFM] 悬浮按钮已安装，位置: (%.0f, %.0f)", g_floatBtn.center.x, g_floatBtn.center.y);
 }
 
-#pragma mark - Hook
-%hook UIApplication
-
-- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    BOOL result = %orig;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+#pragma mark - 监听APP进入前台
+static void appDidBecomeActive(NSNotification *note) {
+    NSLog(@"[SFM] APP进入前台");
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         installFloatButton();
     });
-    return result;
 }
-
-%end
 
 #pragma mark - 入口
 __attribute__((constructor))
 static void init_tweak(void) {
     NSLog(@"[SFM] SmartFloatMenu 已加载");
+    [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        appDidBecomeActive(note);
+    }];
 }
