@@ -1,6 +1,31 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 
+#pragma mark - 日志功能
+static NSMutableString *g_logString = nil;
+static NSString *const kLogPath = @"/tmp/SmartFloatMenu_log.txt";
+static void SFMLog(NSString *format, ...) {
+    if (!g_logString) {
+        g_logString = [[NSMutableString alloc] init];
+        [g_logString appendString:@"=== SmartFloatMenu 日志 ===\n"];
+    }
+    va_list args;
+    va_start(args, format);
+    NSString *msg = [[NSString alloc] initWithFormat:format arguments:args];
+    va_end(args);
+    NSDate *now = [NSDate date];
+    NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+    [fmt setDateFormat:@"HH:mm:ss.SSS"];
+    NSString *timeStr = [fmt stringFromDate:now];
+    NSString *logLine = [NSString stringWithFormat:@"[%@] %@\n", timeStr, msg];
+    [g_logString appendString:logLine];
+    NSLog(@"[SFM] %@", msg);
+    // 保存到文件
+    @try {
+        [g_logString writeToFile:kLogPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    } @catch (NSException *e) {}
+}
+
 #pragma mark - 配置key
 static NSString *const kConfigText1 = @"SFM_configText1";
 static NSString *const kConfigText2 = @"SFM_configText2";
@@ -25,10 +50,14 @@ static BOOL isOrangeColor(UIColor *color) {
 
 #pragma mark - 获取keyWindow
 static UIWindow *getKeyWindow(void) {
-    for (UIWindow *w in [UIApplication sharedApplication].windows) {
-        if (w.isKeyWindow && !w.isHidden) return w;
+    NSArray *windows = [UIApplication sharedApplication].windows;
+    for (UIWindow *w in windows) {
+        if (w.isKeyWindow && !w.isHidden) {
+            return w;
+        }
     }
-    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+    // 兜底：返回第一个可见window
+    for (UIWindow *w in windows) {
         if (!w.isHidden) return w;
     }
     return nil;
@@ -155,14 +184,19 @@ static void scanAndClick(void) {
                     if (match) {
                         CGRect labelFrame = [label convertRect:label.bounds toView:nil];
                         showDebugRect(CGRectMake(labelFrame.origin.x - 5, labelFrame.origin.y - 5, labelFrame.size.width + 10, labelFrame.size.height + 10));
+                        SFMLog(@"识别到文字: '%@'，位置: (%.0f, %.0f)", label.text, labelFrame.origin.x, labelFrame.origin.y);
                         CGFloat bodyHeight = labelFrame.size.height;
                         CGFloat checkX = labelFrame.origin.x + labelFrame.size.width / 2;
                         CGFloat checkY = labelFrame.origin.y + labelFrame.size.height + bodyHeight;
                         CGPoint checkPoint = CGPointMake(checkX, checkY);
                         UIColor *color = getColorAtPoint(checkPoint);
+                        CGFloat r, g, b, a;
+                        [color getRed:&r green:&g blue:&b alpha:&a];
+                        SFMLog(@"检查颜色: (%.0f, %.0f) = R:%.2f G:%.2f B:%.2f, 橙色: %d", checkPoint.x, checkPoint.y, r, g, b, isOrangeColor(color));
                         if (isOrangeColor(color)) {
                             showDebugTapDot(checkPoint);
                             simulateTapAtPoint(checkPoint);
+                            SFMLog(@"执行点击: (%.0f, %.0f)", checkPoint.x, checkPoint.y);
                             return;
                         }
                     }
@@ -187,7 +221,7 @@ static void scanAndClick(void) {
 
 + (void)floatBtnTapped {
     g_isExecuting = !g_isExecuting;
-    NSLog(@"[SFM] 执行状态切换: %@", g_isExecuting ? @"开启" : @"暂停");
+    SFMLog(@"执行状态切换: %@", g_isExecuting ? @"开启" : @"暂停");
     if (g_isExecuting) {
         [g_floatBtn setTitle:@"▶️" forState:UIControlStateNormal];
         g_floatBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.2 alpha:0.8];
@@ -198,16 +232,19 @@ static void scanAndClick(void) {
             scanAndClick();
         });
         dispatch_resume(g_scanTimer);
+        SFMLog(@"扫描定时器已启动");
     } else {
         [g_floatBtn setTitle:@"⏸" forState:UIControlStateNormal];
         g_floatBtn.backgroundColor = [UIColor colorWithRed:0.7 green:0.2 blue:0.2 alpha:0.8];
         if (g_scanTimer) { dispatch_source_cancel(g_scanTimer); g_scanTimer = nil; }
         clearDebugMarks();
+        SFMLog(@"扫描定时器已停止");
     }
 }
 
 + (void)floatBtnLongPressed:(UILongPressGestureRecognizer *)gesture {
     if (gesture.state == UIGestureRecognizerStateBegan) {
+        SFMLog(@"长按触发，显示设置框");
         [self showSettings];
     }
 }
@@ -224,7 +261,11 @@ static void scanAndClick(void) {
 
 + (void)showSettings {
     UIViewController *vc = topViewController();
-    if (!vc) return;
+    if (!vc) {
+        SFMLog(@"topViewController 为 nil，无法显示设置框");
+        return;
+    }
+    SFMLog(@"显示设置框");
     
     NSString *saved1 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText1] ?: @"";
     NSString *saved2 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText2] ?: @"";
@@ -247,12 +288,26 @@ static void scanAndClick(void) {
         [[NSUserDefaults standardUserDefaults] setObject:text1 forKey:kConfigText1];
         [[NSUserDefaults standardUserDefaults] setObject:text2 forKey:kConfigText2];
         [[NSUserDefaults standardUserDefaults] synchronize];
-        NSLog(@"[SFM] 保存设置: text1=%@, text2=%@", text1, text2);
+        SFMLog(@"保存设置: text1=%@, text2=%@", text1, text2);
+    }];
+    
+    UIAlertAction *exportLogAction = [UIAlertAction actionWithTitle:@"导出日志" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        SFMLog(@"用户点击导出日志");
+        NSString *logContent = g_logString ? [NSString stringWithString:g_logString] : @"无日志";
+        // 复制到剪贴板
+        UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
+        pasteboard.string = logContent;
+        SFMLog(@"日志已复制到剪贴板，长度: %lu", (unsigned long)logContent.length);
+        // 提示用户
+        UIAlertController *tip = [UIAlertController alertControllerWithTitle:@"日志已导出" message:[NSString stringWithFormat:@"日志已复制到剪贴板\n文件路径: %@\n长度: %lu字符", kLogPath, (unsigned long)logContent.length] preferredStyle:UIAlertControllerStyleAlert];
+        [tip addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+        [vc presentViewController:tip animated:YES completion:nil];
     }];
     
     UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
     
     [alert addAction:saveAction];
+    [alert addAction:exportLogAction];
     [alert addAction:cancelAction];
     
     [vc presentViewController:alert animated:YES completion:nil];
@@ -262,11 +317,15 @@ static void scanAndClick(void) {
 
 #pragma mark - 安装悬浮按钮
 static void installFloatButton(void) {
-    if (g_floatBtn) return;
+    SFMLog(@"开始安装悬浮按钮");
+    if (g_floatBtn) {
+        SFMLog(@"悬浮按钮已存在，跳过");
+        return;
+    }
     
     UIWindow *keyWindow = getKeyWindow();
     if (!keyWindow) {
-        NSLog(@"[SFM] keyWindow 为 nil，1秒后重试");
+        SFMLog(@"keyWindow 为 nil，1秒后重试");
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             installFloatButton();
         });
@@ -274,7 +333,12 @@ static void installFloatButton(void) {
     }
     
     CGSize screenSize = keyWindow.bounds.size;
-    NSLog(@"[SFM] 屏幕尺寸: %.0fx%.0f, window数量: %lu", screenSize.width, screenSize.height, (unsigned long)[UIApplication sharedApplication].windows.count);
+    SFMLog(@"keyWindow: %@, 屏幕尺寸: %.0fx%.0f, window数量: %lu", keyWindow, screenSize.width, screenSize.height, (unsigned long)[UIApplication sharedApplication].windows.count);
+    
+    // 列出所有window
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        SFMLog(@"  window: %@, hidden: %d, level: %.0f, bounds: %.0fx%.0f", w, w.hidden, w.windowLevel, w.bounds.size.width, w.bounds.size.height);
+    }
     
     // 创建悬浮按钮
     g_floatBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -287,25 +351,27 @@ static void installFloatButton(void) {
     g_floatBtn.titleLabel.font = [UIFont systemFontOfSize:20];
     [g_floatBtn setTitle:@"⏸" forState:UIControlStateNormal];
     [g_floatBtn addTarget:[SFMHandler class] action:@selector(floatBtnTapped) forControlEvents:UIControlEventTouchUpInside];
+    SFMLog(@"悬浮按钮创建成功");
     
     // 长按手势
     UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(floatBtnLongPressed:)];
     longPress.minimumPressDuration = 0.6;
     [g_floatBtn addGestureRecognizer:longPress];
+    SFMLog(@"长按手势添加成功");
     
     // 拖动手势
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(handlePan:)];
     [g_floatBtn addGestureRecognizer:pan];
+    SFMLog(@"拖动手势添加成功");
     
     [keyWindow addSubview:g_floatBtn];
     [keyWindow bringSubviewToFront:g_floatBtn];
-    
-    NSLog(@"[SFM] 悬浮按钮已安装，位置: (%.0f, %.0f)", g_floatBtn.center.x, g_floatBtn.center.y);
+    SFMLog(@"悬浮按钮已添加到keyWindow，位置: (%.0f, %.0f), superview: %@", g_floatBtn.center.x, g_floatBtn.center.y, g_floatBtn.superview);
 }
 
 #pragma mark - 监听APP进入前台
 static void appDidBecomeActive(NSNotification *note) {
-    NSLog(@"[SFM] APP进入前台");
+    SFMLog(@"APP进入前台");
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         installFloatButton();
     });
@@ -314,8 +380,9 @@ static void appDidBecomeActive(NSNotification *note) {
 #pragma mark - 入口
 __attribute__((constructor))
 static void init_tweak(void) {
-    NSLog(@"[SFM] SmartFloatMenu 已加载");
+    SFMLog(@"SmartFloatMenu 插件已加载（constructor）");
     [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         appDidBecomeActive(note);
     }];
+    SFMLog(@"已注册 UIApplicationDidBecomeActiveNotification 监听");
 }
