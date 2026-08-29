@@ -216,9 +216,11 @@ static void scanAndClick(void) {
         
         // 遍历识别结果，找目标文字
         for (VNRecognizedTextObservation *observation in results) {
-            NSArray *candidates = [observation topCandidates];
+            // 用运行时获取topCandidates（Theos头文件太旧）
+            NSArray *candidates = [observation valueForKey:@"topCandidates"];
             if (!candidates || candidates.count == 0) continue;
-            NSString *recognizedText = ((VNRecognizedText *)candidates[0]).string;
+            id firstCandidate = candidates[0];
+            NSString *recognizedText = [firstCandidate valueForKey:@"string"];
             if (!recognizedText) continue;
             
             BOOL match = NO;
