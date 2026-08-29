@@ -219,12 +219,12 @@ static void collapseToSide(void) {
     CGFloat screenW = window.bounds.size.width;
     CGFloat screenH = window.bounds.size.height;
     
-    CGPoint timeCenterInWindow = [g_floatMenu convertPoint:g_timeLabel.center toView:window];
-    [g_timeLabel removeFromSuperview];
-    [window addSubview:g_timeLabel];
-    g_timeLabel.center = timeCenterInWindow;
+    // 只隐藏执行按钮，不隐藏整个菜单（时间标签保持在菜单上，能接收触摸）
+    g_execBtn.hidden = YES;
+    g_floatMenu.backgroundColor = [UIColor clearColor];
+    g_floatMenu.layer.borderWidth = 0;
     
-    g_floatMenu.hidden = YES;
+    // 时间标签旋转成竖排
     BOOL isLeft = (g_floatMenu.center.x < screenW/2);
     g_timeLabel.hidden = NO;
     g_timeLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.6];
@@ -233,9 +233,16 @@ static void collapseToSide(void) {
     g_timeLabel.layer.masksToBounds = YES;
     g_timeLabel.bounds = CGRectMake(0, 0, 70, 20);
     g_timeLabel.transform = CGAffineTransformMakeRotation(isLeft ? M_PI_2 : -M_PI_2);
+    
+    // 菜单吸附到侧边
+    CGFloat targetX = isLeft ? 25 : screenW - 25;
     CGFloat targetY = MIN(MAX(g_floatMenu.center.y, 120), screenH - 120);
-    g_timeLabel.center = CGPointMake(isLeft ? 12 : screenW - 12, targetY);
-    [window bringSubviewToFront:g_timeLabel];
+    g_floatMenu.center = CGPointMake(targetX, targetY);
+    
+    // 时间标签位置调整（在菜单中心）
+    g_timeLabel.center = CGPointMake(g_floatMenu.bounds.size.width/2, g_floatMenu.bounds.size.height/2);
+    
+    [window bringSubviewToFront:g_floatMenu];
     updateTimeLabel();
 }
 
@@ -246,18 +253,24 @@ static void expandFromSide(void) {
     UIWindow *window = g_floatMenu.window;
     if (!window) return;
     CGFloat screenW = window.bounds.size.width;
+    
+    // 恢复执行按钮和菜单样式
+    g_execBtn.hidden = NO;
+    g_floatMenu.layer.borderWidth = 1.5;
+    
+    // 恢复时间标签
     g_timeLabel.transform = CGAffineTransformIdentity;
-    g_floatMenu.hidden = NO;
-    CGFloat menuX = (g_timeLabel.center.x < screenW/2) ? 35 : screenW - 35;
-    CGFloat menuY = g_timeLabel.center.y;
-    g_floatMenu.center = CGPointMake(menuX, menuY);
-    [g_timeLabel removeFromSuperview];
-    [g_floatMenu addSubview:g_timeLabel];
-    g_timeLabel.frame = CGRectMake(-5, g_floatMenu.bounds.size.height + 2, 60, 18);
     g_timeLabel.backgroundColor = [UIColor clearColor];
     g_timeLabel.textColor = [UIColor blackColor];
     g_timeLabel.layer.cornerRadius = 0;
     g_timeLabel.layer.masksToBounds = NO;
+    g_timeLabel.bounds = CGRectMake(0, 0, 60, 18);
+    g_timeLabel.frame = CGRectMake(-5, g_floatMenu.bounds.size.height + 2, 60, 18);
+    
+    // 菜单位置稍微往里一点
+    CGFloat menuX = (g_floatMenu.center.x < screenW/2) ? 35 : screenW - 35;
+    g_floatMenu.center = CGPointMake(menuX, g_floatMenu.center.y);
+    
     updateTimeLabel();
 }
 
@@ -438,20 +451,21 @@ static UIView *createSecondaryView(void) {
 
 + (void)handleTimePan:(UIPanGestureRecognizer *)pan {
     if (!g_isCollapsed) return;
-    UIView *view = pan.view;
-    UIWindow *window = view.window;
+    UIView *view = pan.view; // 时间标签
+    UIView *menu = view.superview; // 菜单
+    UIWindow *window = menu.window;
     CGPoint translation = [pan translationInView:window];
     if (pan.state == UIGestureRecognizerStateBegan || pan.state == UIGestureRecognizerStateChanged) {
-        CGFloat newY = view.center.y + translation.y;
+        CGFloat newY = menu.center.y + translation.y;
         CGFloat screenH = window.bounds.size.height;
         newY = MAX(80, MIN(screenH - 80, newY));
-        view.center = CGPointMake(view.center.x, newY);
+        menu.center = CGPointMake(menu.center.x, newY);
         [pan setTranslation:CGPointZero inView:window];
     } else if (pan.state == UIGestureRecognizerStateEnded || pan.state == UIGestureRecognizerStateCancelled) {
         CGFloat screenW = window.bounds.size.width;
-        CGFloat targetX = (view.center.x < screenW/2) ? 14 : screenW - 14;
+        CGFloat targetX = (menu.center.x < screenW/2) ? 25 : screenW - 25;
         [UIView animateWithDuration:0.25 animations:^{
-            view.center = CGPointMake(targetX, view.center.y);
+            menu.center = CGPointMake(targetX, menu.center.y);
         }];
     }
 }
