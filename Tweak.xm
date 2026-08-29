@@ -253,20 +253,11 @@ static void scanAndClick(void) {
                 showDebugRect(CGRectMake(textFrame.origin.x - 5, textFrame.origin.y - 5, textFrame.size.width + 10, textFrame.size.height + 10));
                 SFMLog(@"  匹配文字: '%@'，位置: (%.0f, %.0f)，大小: %.0fx%.0f", recognizedText, textFrame.origin.x, textFrame.origin.y, textFrame.size.width, textFrame.size.height);
                 
-                // 检查文字下方一个身位的颜色
-                CGFloat checkX = textFrame.origin.x + textFrame.size.width / 2;
-                CGFloat checkY = textFrame.origin.y + textFrame.size.height + height;
-                CGPoint checkPoint = CGPointMake(checkX, checkY);
-                UIColor *color = getColorAtPoint(checkPoint);
-                CGFloat r, g, b, a;
-                [color getRed:&r green:&g blue:&b alpha:&a];
-                SFMLog(@"  检查点: (%.0f, %.0f)，颜色: R:%.2f G:%.2f B:%.2f，是橙色: %d", checkPoint.x, checkPoint.y, r, g, b, isOrangeColor(color));
-                
-                if (isOrangeColor(color)) {
-                    showDebugTapDot(checkPoint);
-                    simulateTapAtPoint(checkPoint);
-                    SFMLog(@"  执行点击: (%.0f, %.0f)", checkPoint.x, checkPoint.y);
-                }
+                // 直接点击文字中心（文字本身就在橙色按钮上）
+                CGPoint tapPoint = CGPointMake(textFrame.origin.x + textFrame.size.width / 2, textFrame.origin.y + textFrame.size.height / 2);
+                showDebugTapDot(tapPoint);
+                simulateTapAtPoint(tapPoint);
+                SFMLog(@"  执行点击文字中心: (%.0f, %.0f)", tapPoint.x, tapPoint.y);
                 return;
             }
         }
