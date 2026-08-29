@@ -135,7 +135,7 @@ static void scanAndClick(void) {
 
 static void snapToSide(void) {
     if (!g_floatMenu) return;
-    UIWindow *window = g_floatMenu.superview;
+    UIWindow *window = (UIWindow *)g_floatMenu.superview;
     if (!window) return;
     
     CGFloat centerX = g_floatMenu.center.x;
@@ -305,7 +305,7 @@ static UIView *createSecondaryView(void) {
     g_secondaryView.hidden = !g_secondaryExpanded;
     if (g_secondaryExpanded) {
         // 定位二级菜单位置
-        UIWindow *window = g_floatMenu.superview;
+        UIWindow *window = (UIWindow *)g_floatMenu.superview;
         CGFloat x = g_floatMenu.frame.origin.x;
         CGFloat y = g_floatMenu.frame.origin.y + g_floatMenu.frame.size.height + 5;
         CGFloat screenW = window.bounds.size.width;
@@ -317,7 +317,7 @@ static UIView *createSecondaryView(void) {
 
 + (void)handlePan:(UIPanGestureRecognizer *)pan {
     UIView *view = pan.view;
-    UIWindow *window = view.superview;
+    UIWindow *window = (UIWindow *)view.superview;
     CGPoint translation = [pan translationInView:window];
     
     if (pan.state == UIGestureRecognizerStateBegan || pan.state == UIGestureRecognizerStateChanged) {
