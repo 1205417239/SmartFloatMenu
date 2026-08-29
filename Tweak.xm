@@ -45,14 +45,6 @@ static BOOL isOrangeColor(UIColor *color) {
     [color getRed:&r green:&g blue:&b alpha:&a];
     return r > 0.7 && g > 0.28 && g < 0.52 && b < 0.42 && (r - g) > 0.25;
 }
-static BOOL isGrayColor(UIColor *color) {
-    if (!color) return NO;
-    CGFloat r, g, b, a;
-    [color getRed:&r green:&g blue:&b alpha:&a];
-    CGFloat diff = fabs(r-g) + fabs(g-b) + fabs(r-b);
-    CGFloat brightness = (r + g + b) / 3.0;
-    return diff < 0.12 && brightness > 0.35 && brightness < 0.85;
-}
 
 #pragma mark - 时间
 static NSString *getTimeString(void) {
