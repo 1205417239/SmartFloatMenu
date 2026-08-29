@@ -20,7 +20,6 @@ static UIButton *g_saveBtn = nil;
 static NSTimer *g_timeTimer = nil;
 static NSTimer *g_scanTimer = nil;
 static NSTimer *g_hideTimer = nil;
-static CGPoint g_lastTouchPoint;
 static NSDate *g_lastActivityDate;
 
 #pragma mark - 颜色解析
