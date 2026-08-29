@@ -95,26 +95,39 @@ static void collapseToSide(void) {
     CGFloat screenW = window.bounds.size.width;
     CGFloat screenH = window.bounds.size.height;
     
-    // 隐藏正方形菜单，只显示时间
+    // 把时间标签从菜单移到window上
+    CGPoint timeCenterInWindow = [g_floatMenu convertPoint:g_timeLabel.center toView:window];
+    [g_timeLabel removeFromSuperview];
+    [window addSubview:g_timeLabel];
+    g_timeLabel.center = timeCenterInWindow;
+    
+    // 隐藏正方形菜单
     g_floatMenu.hidden = YES;
     
-    // 时间标签放到侧边
-    CGFloat timeW = 70;
-    CGFloat timeH = 20;
-    CGFloat targetX = (g_floatMenu.center.x < screenW/2) ? 0 : screenW - timeW;
-    CGFloat targetY = MIN(MAX(g_floatMenu.center.y, 100), screenH - 100);
-    
-    [UIView animateWithDuration:0.3 animations:^{
-        g_timeLabel.frame = CGRectMake(targetX, targetY, timeW, timeH);
-    }];
+    // 时间标签竖立显示，吸附到边缘
+    BOOL isLeft = (g_floatMenu.center.x < screenW/2);
     
     g_timeLabel.hidden = NO;
-    g_timeLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
+    g_timeLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.6];
     g_timeLabel.textColor = [UIColor whiteColor];
     g_timeLabel.layer.cornerRadius = 4;
     g_timeLabel.layer.masksToBounds = YES;
+    g_timeLabel.bounds = CGRectMake(0, 0, 70, 20);
     
-    NSLog(@"[SFM] 已收纳到侧边");
+    // 旋转90度竖立显示
+    g_timeLabel.transform = CGAffineTransformMakeRotation(isLeft ? M_PI_2 : -M_PI_2);
+    
+    // 位置：吸附到就近屏幕边缘
+    CGFloat targetY = MIN(MAX(g_floatMenu.center.y, 120), screenH - 120);
+    if (isLeft) {
+        g_timeLabel.center = CGPointMake(12, targetY);
+    } else {
+        g_timeLabel.center = CGPointMake(screenW - 12, targetY);
+    }
+    
+    [window bringSubviewToFront:g_timeLabel];
+    
+    NSLog(@"[SFM] 已收纳到侧边，时间竖立显示");
 }
 
 static void expandFromSide(void) {
@@ -124,22 +137,30 @@ static void expandFromSide(void) {
     UIWindow *window = (UIWindow *)g_floatMenu.superview;
     CGFloat screenW = window.bounds.size.width;
     
+    // 恢复旋转
+    g_timeLabel.transform = CGAffineTransformIdentity;
+    
     // 显示正方形菜单
     g_floatMenu.hidden = NO;
     
     // 菜单位置从时间标签位置恢复
-    CGFloat menuX = (g_timeLabel.frame.origin.x < screenW/2) ? 35 : screenW - 35;
+    CGFloat menuX = (g_timeLabel.center.x < screenW/2) ? 35 : screenW - 35;
     CGFloat menuY = g_timeLabel.center.y;
     
     g_floatMenu.center = CGPointMake(menuX, menuY);
     
-    // 时间标签恢复到菜单下方
+    // 把时间标签从window移回菜单
+    [g_timeLabel removeFromSuperview];
+    [g_floatMenu addSubview:g_timeLabel];
+    
+    // 时间标签恢复到菜单下方，黑色字体
     CGFloat timeW = 60;
     CGFloat timeH = 18;
-    g_timeLabel.frame = CGRectMake(g_floatMenu.frame.origin.x - 5, g_floatMenu.frame.origin.y + g_floatMenu.frame.size.height + 2, timeW, timeH);
+    g_timeLabel.frame = CGRectMake(-5, g_floatMenu.bounds.size.height + 2, timeW, timeH);
     g_timeLabel.backgroundColor = [UIColor clearColor];
-    g_timeLabel.textColor = [UIColor whiteColor];
+    g_timeLabel.textColor = [UIColor blackColor];
     g_timeLabel.layer.cornerRadius = 0;
+    g_timeLabel.layer.masksToBounds = NO;
     
     NSLog(@"[SFM] 已展开");
 }
@@ -177,7 +198,7 @@ static UIView *createFloatMenu(void) {
     // 时间标签在正方形下方
     g_timeLabel = [[UILabel alloc] initWithFrame:CGRectMake(-5, menuSize + 2, 60, 18)];
     g_timeLabel.font = [UIFont systemFontOfSize:11];
-    g_timeLabel.textColor = [UIColor whiteColor];
+    g_timeLabel.textColor = [UIColor blackColor];
     g_timeLabel.textAlignment = NSTextAlignmentCenter;
     g_timeLabel.text = getTimeString();
     [menu addSubview:g_timeLabel];
@@ -309,11 +330,6 @@ static UIView *createSecondaryView(void) {
     if (pan.state == UIGestureRecognizerStateBegan || pan.state == UIGestureRecognizerStateChanged) {
         view.center = CGPointMake(view.center.x + translation.x, view.center.y + translation.y);
         [pan setTranslation:CGPointZero inView:window];
-        
-        // 时间标签跟随
-        CGFloat timeW = 60;
-        CGFloat timeH = 18;
-        g_timeLabel.frame = CGRectMake(view.frame.origin.x - 5, view.frame.origin.y + view.frame.size.height + 2, timeW, timeH);
         
         // 二级菜单跟随
         if (!g_secondaryView.hidden) {
