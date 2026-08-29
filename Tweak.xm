@@ -162,73 +162,38 @@ static void clearDebugMarks(void) {
     if (g_debugTapDot) g_debugTapDot.hidden = YES;
 }
 
-#pragma mark - 识字辨色点击
+#pragma mark - 识字辨色点击（纯颜色识别版，适配Unity游戏）
 static int g_scanCount = 0;
 static void scanAndClick(void) {
     if (!g_isExecuting) return;
     g_scanCount++;
-    SFMLog(@"扫描 #%d 开始", g_scanCount);
-    NSString *targetText1 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText1];
-    NSString *targetText2 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText2];
-    SFMLog(@"目标文字1: '%@', 目标文字2: '%@'", targetText1, targetText2);
-    if ((!targetText1 || targetText1.length == 0) && (!targetText2 || targetText2.length == 0)) {
-        SFMLog(@"目标文字为空，跳过扫描");
-        return;
-    }
     
-    int windowCount = 0;
-    int viewCount = 0;
-    int labelCount = 0;
-    int matchCount = 0;
+    UIWindow *keyWindow = getKeyWindow();
+    if (!keyWindow) return;
     
-    for (UIWindow *keyWindow in [UIApplication sharedApplication].windows) {
-        windowCount++;
-        if (keyWindow.hidden || keyWindow.alpha < 0.1) {
-            SFMLog(@"  window #%d 隐藏或透明，跳过", windowCount);
-            continue;
-        }
-        SFMLog(@"  window #%d: %@, bounds: %.0fx%.0f", windowCount, keyWindow, keyWindow.bounds.size.width, keyWindow.bounds.size.height);
-        NSMutableArray *queue = [NSMutableArray arrayWithArray:keyWindow.subviews];
-        while (queue.count > 0) {
-            UIView *view = queue.firstObject;
-            [queue removeObjectAtIndex:0];
-            viewCount++;
-            if ([view isKindOfClass:[UILabel class]]) {
-                labelCount++;
-                UILabel *label = (UILabel *)view;
-                if (label.text && !label.hidden && label.alpha > 0.1) {
-                    BOOL match = NO;
-                    if (targetText1 && targetText1.length > 0 && [label.text containsString:targetText1]) match = YES;
-                    if (targetText2 && targetText2.length > 0 && [label.text containsString:targetText2]) match = YES;
-                    if (match) {
-                        matchCount++;
-                        CGRect labelFrame = [label convertRect:label.bounds toView:nil];
-                        showDebugRect(CGRectMake(labelFrame.origin.x - 5, labelFrame.origin.y - 5, labelFrame.size.width + 10, labelFrame.size.height + 10));
-                        SFMLog(@"    匹配文字 #%d: '%@'，位置: (%.0f, %.0f)，大小: %.0fx%.0f", matchCount, label.text, labelFrame.origin.x, labelFrame.origin.y, labelFrame.size.width, labelFrame.size.height);
-                        CGFloat bodyHeight = labelFrame.size.height;
-                        CGFloat checkX = labelFrame.origin.x + labelFrame.size.width / 2;
-                        CGFloat checkY = labelFrame.origin.y + labelFrame.size.height + bodyHeight;
-                        CGPoint checkPoint = CGPointMake(checkX, checkY);
-                        UIColor *color = getColorAtPoint(checkPoint);
-                        CGFloat r, g, b, a;
-                        [color getRed:&r green:&g blue:&b alpha:&a];
-                        SFMLog(@"    检查点: (%.0f, %.0f)，颜色: R:%.2f G:%.2f B:%.2f，是橙色: %d", checkPoint.x, checkPoint.y, r, g, b, isOrangeColor(color));
-                        if (isOrangeColor(color)) {
-                            showDebugTapDot(checkPoint);
-                            simulateTapAtPoint(checkPoint);
-                            SFMLog(@"    执行点击: (%.0f, %.0f)", checkPoint.x, checkPoint.y);
-                            SFMLog(@"扫描 #%d 结束（已点击），window: %d, view: %d, label: %d, match: %d", g_scanCount, windowCount, viewCount, labelCount, matchCount);
-                            return;
-                        }
-                    }
-                }
-            }
-            for (UIView *sub in view.subviews) {
-                [queue addObject:sub];
+    CGSize screenSize = keyWindow.bounds.size;
+    CGFloat step = 15; // 每隔15像素采样一次
+    
+    // 遍历屏幕找橙色区域
+    for (CGFloat y = 80; y < screenSize.height - 80; y += step) {
+        for (CGFloat x = 40; x < screenSize.width - 40; x += step) {
+            CGPoint point = CGPointMake(x, y);
+            UIColor *color = getColorAtPoint(point);
+            if (isOrangeColor(color)) {
+                // 找到橙色区域，显示调试标记并点击
+                showDebugRect(CGRectMake(x - 15, y - 15, 30, 30));
+                showDebugTapDot(point);
+                simulateTapAtPoint(point);
+                SFMLog(@"扫描 #%d: 找到橙色区域，点击: (%.0f, %.0f)", g_scanCount, x, y);
+                return;
             }
         }
     }
-    SFMLog(@"扫描 #%d 结束，window: %d, view: %d, label: %d, match: %d", g_scanCount, windowCount, viewCount, labelCount, matchCount);
+    
+    // 每50次扫描记录一次（避免日志过多）
+    if (g_scanCount % 50 == 0) {
+        SFMLog(@"扫描 #%d: 未找到橙色区域", g_scanCount);
+    }
 }
 
 #pragma mark - 事件处理
@@ -289,46 +254,23 @@ static void scanAndClick(void) {
     }
     SFMLog(@"显示设置框");
     
-    NSString *saved1 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText1] ?: @"";
-    NSString *saved2 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText2] ?: @"";
-    
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"识别文字设置" message:@"输入需要识别的文字（下方橙色则点击）" preferredStyle:UIAlertControllerStyleAlert];
-    
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"识别文字1";
-        textField.text = saved1;
-    }];
-    
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"识别文字2";
-        textField.text = saved2;
-    }];
-    
-    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        NSString *text1 = alert.textFields[0].text;
-        NSString *text2 = alert.textFields[1].text;
-        [[NSUserDefaults standardUserDefaults] setObject:text1 forKey:kConfigText1];
-        [[NSUserDefaults standardUserDefaults] setObject:text2 forKey:kConfigText2];
-        [[NSUserDefaults standardUserDefaults] synchronize];
-        SFMLog(@"保存设置: text1=%@, text2=%@", text1, text2);
-    }];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"颜色识别设置" message:@"纯颜色识别模式（适配Unity游戏）\n自动识别屏幕上的橙色区域并点击" preferredStyle:UIAlertControllerStyleAlert];
     
     UIAlertAction *exportLogAction = [UIAlertAction actionWithTitle:@"导出日志" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         SFMLog(@"用户点击导出日志");
-        NSString *logContent = g_logString ? [NSString stringWithString:g_logString] : @"无日志";
-        // 复制到剪贴板
-        UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
-        pasteboard.string = logContent;
-        SFMLog(@"日志已复制到剪贴板，长度: %lu", (unsigned long)logContent.length);
-        // 提示用户
-        UIAlertController *tip = [UIAlertController alertControllerWithTitle:@"日志已导出" message:[NSString stringWithFormat:@"日志已复制到剪贴板\n文件路径: %@\n长度: %lu字符", kLogPath, (unsigned long)logContent.length] preferredStyle:UIAlertControllerStyleAlert];
-        [tip addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-        [vc presentViewController:tip animated:YES completion:nil];
+        // 保存日志到文件
+        [g_logString writeToFile:kLogPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        NSURL *fileURL = [NSURL fileURLWithPath:kLogPath];
+        // 直接用系统分享面板
+        UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[fileURL] applicationActivities:nil];
+        UIViewController *topVC = topViewController();
+        if (topVC) {
+            [topVC presentViewController:activityVC animated:YES completion:nil];
+        }
     }];
     
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil];
     
-    [alert addAction:saveAction];
     [alert addAction:exportLogAction];
     [alert addAction:cancelAction];
     
