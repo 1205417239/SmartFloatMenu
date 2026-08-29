@@ -177,12 +177,15 @@ static UIImage *captureFullScreen(void) {
 #pragma mark - 识字辨色点击（Vision OCR版，适配Unity游戏）
 static int g_scanCount = 0;
 static void scanAndClick(void) {
+    SFMLog(@"[调试] scanAndClick 被调用，g_isExecuting=%d", g_isExecuting);
     if (!g_isExecuting) return;
     g_scanCount++;
     
     NSString *targetText1 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText1];
     NSString *targetText2 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText2];
+    SFMLog(@"[调试] 扫描 #%d: 目标文字1='%@', 目标文字2='%@'", g_scanCount, targetText1, targetText2);
     if ((!targetText1 || targetText1.length == 0) && (!targetText2 || targetText2.length == 0)) {
+        SFMLog(@"[调试] 目标文字为空，返回");
         return;
     }
     
@@ -192,6 +195,7 @@ static void scanAndClick(void) {
         SFMLog(@"扫描 #%d: 截图失败", g_scanCount);
         return;
     }
+    SFMLog(@"[调试] 截图成功，尺寸: %.0fx%.0f", screenshot.size.width, screenshot.size.height);
     
     // 用Vision框架OCR识别文字
     VNRecognizeTextRequest *request = [[VNRecognizeTextRequest alloc] initWithCompletionHandler:^(VNRequest *request, NSError *error) {
@@ -302,10 +306,11 @@ static void scanAndClick(void) {
         g_scanTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
         dispatch_source_set_timer(g_scanTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.5 * NSEC_PER_SEC, 0); // 每0.5秒扫描一次
         dispatch_source_set_event_handler(g_scanTimer, ^{
+            SFMLog(@"[调试] 定时器触发，调用 scanAndClick");
             scanAndClick();
         });
         dispatch_resume(g_scanTimer);
-        SFMLog(@"扫描定时器已启动（每0.5秒一次）");
+        SFMLog(@"扫描定时器已启动（每0.5秒一次），g_scanTimer=%p", g_scanTimer);
     } else {
         [g_floatBtn setTitle:@"⏸" forState:UIControlStateNormal];
         g_floatBtn.backgroundColor = [UIColor colorWithRed:0.7 green:0.2 blue:0.2 alpha:0.8];
