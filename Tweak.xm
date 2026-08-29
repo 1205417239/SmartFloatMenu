@@ -180,10 +180,17 @@ static void scanAndClick(void) {
         // 记录所有识别到的文字（方便调试）
         NSMutableString *allText = [NSMutableString string];
         for (VNRecognizedTextObservation *observation in results) {
-            NSArray *candidates = [observation valueForKey:@"topCandidates"];
+            // 用 performSelector 调用 topCandidates 方法（Theos头文件太旧）
+            NSArray *candidates = nil;
+            if ([observation respondsToSelector:@selector(topCandidates)]) {
+                candidates = [observation performSelector:@selector(topCandidates)];
+            }
             if (!candidates || candidates.count == 0) continue;
             id firstCandidate = candidates[0];
-            NSString *recognizedText = [firstCandidate valueForKey:@"string"];
+            NSString *recognizedText = nil;
+            if ([firstCandidate respondsToSelector:@selector(string)]) {
+                recognizedText = [firstCandidate performSelector:@selector(string)];
+            }
             if (recognizedText) {
                 [allText appendString:recognizedText];
                 [allText appendString:@" | "];
@@ -193,10 +200,17 @@ static void scanAndClick(void) {
         
         // 遍历识别结果，找目标文字
         for (VNRecognizedTextObservation *observation in results) {
-            NSArray *candidates = [observation valueForKey:@"topCandidates"];
+            // 用 performSelector 调用 topCandidates 方法
+            NSArray *candidates = nil;
+            if ([observation respondsToSelector:@selector(topCandidates)]) {
+                candidates = [observation performSelector:@selector(topCandidates)];
+            }
             if (!candidates || candidates.count == 0) continue;
             id firstCandidate = candidates[0];
-            NSString *recognizedText = [firstCandidate valueForKey:@"string"];
+            NSString *recognizedText = nil;
+            if ([firstCandidate respondsToSelector:@selector(string)]) {
+                recognizedText = [firstCandidate performSelector:@selector(string)];
+            }
             if (!recognizedText) continue;
             
             // 去除空格和换行后匹配
