@@ -1,0 +1,74 @@
+﻿2026-08-29T14:48:46.5017350Z ##[group]Run brew install ldid xz
+2026-08-29T14:48:46.5018470Z [36;1mbrew install ldid xz[0m
+2026-08-29T14:48:46.5019800Z [36;1mgit clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS[0m
+2026-08-29T14:48:46.5021930Z [36;1mecho "THEOS=$THEOS" >> $GITHUB_ENV[0m
+2026-08-29T14:48:46.5023360Z [36;1mecho "SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV[0m
+2026-08-29T14:48:46.5099930Z shell: /bin/bash -e {0}
+2026-08-29T14:48:46.5100790Z env:
+2026-08-29T14:48:46.5102170Z   THEOS: /Users/runner/work/SmartFloatMenu/SmartFloatMenu/theos
+2026-08-29T14:48:46.5103630Z ##[endgroup]
+2026-08-29T14:48:49.6694680Z [33mWarning:[0m xz 5.8.3 is already installed and up-to-date.
+2026-08-29T14:48:49.6695860Z To reinstall 5.8.3, run:
+2026-08-29T14:48:49.6696610Z   brew reinstall xz
+2026-08-29T14:48:49.8765550Z ##[warning]The following taps are not trusted:
+  aws/tap
+
+Homebrew is currently ignoring formulae, casks and commands from these taps because tap trust is required.
+
+Untap them with:
+  brew untap aws/tap
+Trust specific formulae, casks and commands with:
+  brew trust --formula <user>/<tap>/<formula>
+  brew trust --cask <user>/<tap>/<cask>
+  brew trust --command <user>/<tap>/<command>
+Whole-tap trust is broader and includes all current and future formulae,
+casks and commands from the listed taps. Trust whole taps with:
+  brew trust aws/tap
+To disable trust checks:
+  export HOMEBREW_NO_REQUIRE_TAP_TRUST=1
+This is not recommended and will be removed in a later release.
+For more information, see:
+  https://docs.brew.sh/Tap-Trust
+2026-08-29T14:48:50.3882870Z [34m==>[0m [1mWould install 1 formula:[0m
+2026-08-29T14:48:50.3883320Z ldid
+2026-08-29T14:48:50.3900710Z [34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/ldid/manifests/2.1.5_1-1[0m
+2026-08-29T14:48:50.7170340Z [34m==>[0m [1mWould install 1 dependency for ldid:[0m
+2026-08-29T14:48:50.7170900Z libplist
+2026-08-29T14:48:50.7177460Z [32m==>[0m [1mFetching downloads for: [32mldid[39m[0m
+2026-08-29T14:48:50.9570130Z ✔︎ Bottle Manifest libplist (2.7.0)
+2026-08-29T14:48:50.9684130Z ✔︎ Bottle ldid (2.1.5_1)
+2026-08-29T14:48:50.9800880Z ✔︎ Bottle libplist (2.7.0)
+2026-08-29T14:48:50.9926110Z [32m==>[0m [1mInstalling ldid dependency: [32mlibplist[39m[0m
+2026-08-29T14:48:50.9965030Z [34m==>[0m [1mPouring libplist--2.7.0.arm64_tahoe.bottle.tar.gz[0m
+2026-08-29T14:48:51.1211960Z 🍺  /opt/homebrew/Cellar/libplist/2.7.0: 32 files, 605.5KB
+2026-08-29T14:48:51.1231630Z [32m==>[0m [1mInstalling [32mldid[39m[0m
+2026-08-29T14:48:51.1235260Z [34m==>[0m [1mPouring ldid--2.1.5_1.arm64_tahoe.bottle.1.tar.gz[0m
+2026-08-29T14:48:51.1546130Z 🍺  /opt/homebrew/Cellar/ldid/2.1.5_1: 6 files, 271KB
+2026-08-29T14:48:51.1813720Z Cloning into '/Users/runner/work/SmartFloatMenu/SmartFloatMenu/theos'...
+2026-08-29T14:48:51.9544360Z Submodule 'vendor/dm.pl' (https://github.com/theos/dm.pl.git) registered for path 'vendor/dm.pl'
+2026-08-29T14:48:51.9568750Z Submodule 'vendor/include' (https://github.com/theos/headers.git) registered for path 'vendor/include'
+2026-08-29T14:48:51.9583440Z Submodule 'vendor/lib' (https://github.com/theos/lib.git) registered for path 'vendor/lib'
+2026-08-29T14:48:51.9659870Z Submodule 'vendor/logos' (https://github.com/theos/logos.git) registered for path 'vendor/logos'
+2026-08-29T14:48:51.9670910Z Submodule 'vendor/nic' (https://github.com/theos/nic.git) registered for path 'vendor/nic'
+2026-08-29T14:48:51.9773240Z Submodule 'vendor/orion' (https://github.com/theos/orion.git) registered for path 'vendor/orion'
+2026-08-29T14:48:51.9816300Z Submodule 'vendor/swift-support' (https://github.com/theos/swift-support.git) registered for path 'vendor/swift-support'
+2026-08-29T14:48:51.9848630Z Submodule 'vendor/templates' (https://github.com/theos/templates.git) registered for path 'vendor/templates'
+2026-08-29T14:48:51.9868020Z Cloning into '/Users/runner/work/SmartFloatMenu/SmartFloatMenu/theos/vendor/dm.pl'...
+2026-08-29T14:48:52.5954500Z Cloning into '/Users/runner/work/SmartFloatMenu/SmartFloatMenu/theos/vendor/include'...
+2026-08-29T14:48:53.4190270Z Cloning into '/Users/runner/work/SmartFloatMenu/SmartFloatMenu/theos/vendor/lib'...
+2026-08-29T14:48:54.0741300Z Cloning into '/Users/runner/work/SmartFloatMenu/SmartFloatMenu/theos/vendor/logos'...
+2026-08-29T14:48:54.6859470Z Cloning into '/Users/runner/work/SmartFloatMenu/SmartFloatMenu/theos/vendor/nic'...
+2026-08-29T14:48:55.2365470Z Cloning into '/Users/runner/work/SmartFloatMenu/SmartFloatMenu/theos/vendor/orion'...
+2026-08-29T14:48:55.9097750Z Cloning into '/Users/runner/work/SmartFloatMenu/SmartFloatMenu/theos/vendor/swift-support'...
+2026-08-29T14:48:56.5517650Z Cloning into '/Users/runner/work/SmartFloatMenu/SmartFloatMenu/theos/vendor/templates'...
+2026-08-29T14:48:57.2610180Z Submodule path 'vendor/dm.pl': checked out 'd9a3b72e274226dd2823c0a7c1d6d05099f4f51c'
+2026-08-29T14:48:57.5379710Z Submodule path 'vendor/include': checked out '13c1f17176d7efe6871551cd69a75b71ac4eeaf1'
+2026-08-29T14:48:57.6735850Z Submodule path 'vendor/lib': checked out '6f2af307568e6b8c52181d26314b0cd69ffaf188'
+2026-08-29T14:48:57.7673240Z Submodule path 'vendor/logos': checked out '777925d1add4ee3485a2432a6f6d5e3ded59de7b'
+2026-08-29T14:48:57.8747930Z Submodule path 'vendor/nic': checked out '4e7adcbeac2e4636b91e2f76341adfe4c4d0ceec'
+2026-08-29T14:48:58.0577620Z Submodule path 'vendor/orion': checked out 'c0ed879ecaae16f3c8d06a6c36302f6c78d1f7e4'
+2026-08-29T14:48:58.0680000Z Submodule 'fishhook' (https://github.com/facebook/fishhook.git) registered for path 'vendor/orion/fishhook'
+2026-08-29T14:48:58.0880170Z Cloning into '/Users/runner/work/SmartFloatMenu/SmartFloatMenu/theos/vendor/orion/fishhook'...
+2026-08-29T14:48:58.8422490Z Submodule path 'vendor/orion/fishhook': checked out 'aadc161ac3b80db07a9908851839a17ba63a9eb1'
+2026-08-29T14:48:58.9140860Z Submodule path 'vendor/swift-support': checked out '4cf59ff04cdb2ceb27ea2228753e0497297b6182'
+2026-08-29T14:48:58.9969040Z Submodule path 'vendor/templates': checked out '6c3944e281c4726f1383755d0fbb642840312d28'

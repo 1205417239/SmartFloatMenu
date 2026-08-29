@@ -1,0 +1,75 @@
+﻿2026-08-29T14:48:44.4126100Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-29T14:48:44.4133880Z ##[group]Run actions/checkout@v4
+2026-08-29T14:48:44.4134370Z with:
+2026-08-29T14:48:44.4135110Z   repository: 1205417239/SmartFloatMenu
+2026-08-29T14:48:44.4138290Z   token: ***
+2026-08-29T14:48:44.4138620Z   ssh-strict: true
+2026-08-29T14:48:44.4138950Z   ssh-user: git
+2026-08-29T14:48:44.4139650Z   persist-credentials: true
+2026-08-29T14:48:44.4140020Z   clean: true
+2026-08-29T14:48:44.4140350Z   sparse-checkout-cone-mode: true
+2026-08-29T14:48:44.4140760Z   fetch-depth: 1
+2026-08-29T14:48:44.4141160Z   fetch-tags: false
+2026-08-29T14:48:44.4141490Z   show-progress: true
+2026-08-29T14:48:44.4141810Z   lfs: false
+2026-08-29T14:48:44.4142120Z   submodules: false
+2026-08-29T14:48:44.4142520Z   set-safe-directory: true
+2026-08-29T14:48:44.4142980Z   allow-unsafe-pr-checkout: false
+2026-08-29T14:48:44.4144150Z ##[endgroup]
+2026-08-29T14:48:45.1619290Z Syncing repository: 1205417239/SmartFloatMenu
+2026-08-29T14:48:45.1624610Z ##[group]Getting Git version info
+2026-08-29T14:48:45.1626950Z Working directory is '/Users/runner/work/SmartFloatMenu/SmartFloatMenu'
+2026-08-29T14:48:45.1629720Z [command]/opt/homebrew/bin/git version
+2026-08-29T14:48:45.2094810Z git version 2.55.0
+2026-08-29T14:48:45.2152390Z ##[endgroup]
+2026-08-29T14:48:45.2158470Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/d1458eb9-bb76-49a3-9e81-dc98b158f263/.gitconfig'
+2026-08-29T14:48:45.2164310Z Temporarily overriding HOME='/Users/runner/work/_temp/d1458eb9-bb76-49a3-9e81-dc98b158f263' before making global git config changes
+2026-08-29T14:48:45.2167660Z Adding repository directory to the temporary git global config as a safe directory
+2026-08-29T14:48:45.2170870Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/SmartFloatMenu/SmartFloatMenu
+2026-08-29T14:48:45.2361450Z Deleting the contents of '/Users/runner/work/SmartFloatMenu/SmartFloatMenu'
+2026-08-29T14:48:45.2365180Z ##[group]Initializing the repository
+2026-08-29T14:48:45.2369190Z [command]/opt/homebrew/bin/git init /Users/runner/work/SmartFloatMenu/SmartFloatMenu
+2026-08-29T14:48:45.2784260Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-08-29T14:48:45.2796100Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-08-29T14:48:45.2799060Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-08-29T14:48:45.2800970Z hint: call:
+2026-08-29T14:48:45.2802130Z hint:
+2026-08-29T14:48:45.2803420Z hint: 	git config --global init.defaultBranch <name>
+2026-08-29T14:48:45.2804980Z hint:
+2026-08-29T14:48:45.2806480Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-08-29T14:48:45.2808940Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-08-29T14:48:45.2810760Z hint:
+2026-08-29T14:48:45.2811850Z hint: 	git branch -m <name>
+2026-08-29T14:48:45.2813010Z hint:
+2026-08-29T14:48:45.2814730Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-08-29T14:48:45.2817640Z Initialized empty Git repository in /Users/runner/work/SmartFloatMenu/SmartFloatMenu/.git/
+2026-08-29T14:48:45.2838840Z [command]/opt/homebrew/bin/git remote add origin https://github.com/1205417239/SmartFloatMenu
+2026-08-29T14:48:45.2928910Z ##[endgroup]
+2026-08-29T14:48:45.2929930Z ##[group]Disabling automatic garbage collection
+2026-08-29T14:48:45.2930610Z [command]/opt/homebrew/bin/git config --local gc.auto 0
+2026-08-29T14:48:45.3036680Z ##[endgroup]
+2026-08-29T14:48:45.3037490Z ##[group]Setting up auth
+2026-08-29T14:48:45.3044630Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-08-29T14:48:45.3212060Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-08-29T14:48:45.4828020Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-08-29T14:48:45.4945720Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-08-29T14:48:45.6214680Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-08-29T14:48:45.6324330Z [command]/opt/homebrew/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-08-29T14:48:45.8016590Z [command]/opt/homebrew/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-08-29T14:48:45.8097360Z ##[endgroup]
+2026-08-29T14:48:45.8099670Z ##[group]Fetching the repository
+2026-08-29T14:48:45.8111320Z [command]/opt/homebrew/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +02fb0fd1b1b4a9e735dc5d2bda43396359b2cb4b:refs/remotes/origin/main
+2026-08-29T14:48:46.2318750Z From https://github.com/1205417239/SmartFloatMenu
+2026-08-29T14:48:46.2322010Z  * [new ref]         02fb0fd1b1b4a9e735dc5d2bda43396359b2cb4b -> origin/main
+2026-08-29T14:48:46.2324610Z ##[endgroup]
+2026-08-29T14:48:46.2326630Z ##[group]Determining the checkout info
+2026-08-29T14:48:46.2329710Z ##[endgroup]
+2026-08-29T14:48:46.2332100Z [command]/opt/homebrew/bin/git sparse-checkout disable
+2026-08-29T14:48:46.2427330Z [command]/opt/homebrew/bin/git config --local --unset-all extensions.worktreeConfig
+2026-08-29T14:48:46.2509960Z ##[group]Checking out the ref
+2026-08-29T14:48:46.2513300Z [command]/opt/homebrew/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-08-29T14:48:46.3421420Z Switched to a new branch 'main'
+2026-08-29T14:48:46.3522790Z branch 'main' set up to track 'origin/main'.
+2026-08-29T14:48:46.4206330Z ##[endgroup]
+2026-08-29T14:48:46.4385570Z [command]/opt/homebrew/bin/git log -1 --format=%H
+2026-08-29T14:48:46.4387000Z 02fb0fd1b1b4a9e735dc5d2bda43396359b2cb4b

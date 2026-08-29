@@ -216,8 +216,9 @@ static void scanAndClick(void) {
         
         // 遍历识别结果，找目标文字
         for (VNRecognizedTextObservation *observation in results) {
-            if (observation.topCandidates.count == 0) continue;
-            NSString *recognizedText = observation.topCandidates[0].string;
+            NSArray *candidates = [observation topCandidates];
+            if (!candidates || candidates.count == 0) continue;
+            NSString *recognizedText = ((VNRecognizedText *)candidates[0]).string;
             if (!recognizedText) continue;
             
             BOOL match = NO;
