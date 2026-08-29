@@ -19,6 +19,11 @@ static UITextField *g_textField2 = nil;
 static UIButton *g_saveBtn = nil;
 static NSTimer *g_timeTimer = nil;
 static dispatch_source_t g_scanTimer = nil;  // 1毫秒扫描定时器
+
+// 调试可视化（后期可删除）
+static UIView *g_debugOverlay = nil;
+static UIView *g_debugRect = nil;       // 识别矩形框
+static UIView *g_debugTapDot = nil;     // 点击特效圆点
 static NSTimer *g_hideTimer = nil;
 static UILongPressGestureRecognizer *g_longPress = nil;
 static BOOL g_isVerticalTime = NO;  // 时间是否竖排显示
@@ -127,6 +132,63 @@ static void simulateTapAtPoint(CGPoint point) {
     });
 }
 
+#pragma mark - 调试可视化（后期可删除）
+
+static void ensureDebugOverlay(void) {
+    if (g_debugOverlay) return;
+    UIWindow *keyWindow = nil;
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        if (w.isKeyWindow && !w.isHidden) { keyWindow = w; break; }
+    }
+    if (!keyWindow) return;
+    g_debugOverlay = [[UIView alloc] initWithFrame:keyWindow.bounds];
+    g_debugOverlay.backgroundColor = [UIColor clearColor];
+    g_debugOverlay.userInteractionEnabled = NO;
+    [keyWindow addSubview:g_debugOverlay];
+    [keyWindow bringSubviewToFront:g_debugOverlay];
+}
+
+static void showDebugRect(CGRect frame) {
+    ensureDebugOverlay();
+    if (!g_debugRect) {
+        g_debugRect = [[UIView alloc] init];
+        g_debugRect.backgroundColor = [UIColor clearColor];
+        g_debugRect.layer.borderColor = [UIColor redColor].CGColor;
+        g_debugRect.layer.borderWidth = 2.0;
+        [g_debugOverlay addSubview:g_debugRect];
+    }
+    g_debugRect.frame = frame;
+    g_debugRect.hidden = NO;
+}
+
+static void showDebugTapDot(CGPoint point) {
+    ensureDebugOverlay();
+    if (!g_debugTapDot) {
+        g_debugTapDot = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 20, 20)];
+        g_debugTapDot.backgroundColor = [UIColor whiteColor];
+        g_debugTapDot.layer.cornerRadius = 10;
+        g_debugTapDot.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.8].CGColor;
+        g_debugTapDot.layer.borderWidth = 2;
+        [g_debugOverlay addSubview:g_debugTapDot];
+    }
+    g_debugTapDot.center = point;
+    g_debugTapDot.hidden = NO;
+    // 闪烁动画
+    g_debugTapDot.alpha = 1.0;
+    [UIView animateWithDuration:0.15 animations:^{
+        g_debugTapDot.alpha = 0.3;
+    } completion:^(BOOL finished) {
+        [UIView animateWithDuration:0.1 animations:^{
+            g_debugTapDot.alpha = 1.0;
+        }];
+    }];
+}
+
+static void clearDebugMarks(void) {
+    if (g_debugRect) { g_debugRect.hidden = YES; }
+    if (g_debugTapDot) { g_debugTapDot.hidden = YES; }
+}
+
 #pragma mark - 识字辨色点击
 
 static void scanAndClick(void) {
@@ -158,6 +220,9 @@ static void scanAndClick(void) {
                         // 获取label在屏幕上的位置
                         CGRect labelFrame = [label convertRect:label.bounds toView:nil];
                         
+                        // 调试：显示识别矩形框
+                        showDebugRect(CGRectMake(labelFrame.origin.x - 5, labelFrame.origin.y - 5, labelFrame.size.width + 10, labelFrame.size.height + 10));
+                        
                         // 检查文字下面一个身位的颜色
                         CGFloat bodyHeight = labelFrame.size.height;
                         CGFloat checkX = labelFrame.origin.x + labelFrame.size.width / 2;
@@ -170,6 +235,8 @@ static void scanAndClick(void) {
                             // 橙色，点击文字下面一个身位
                             CGPoint tapPoint = checkPoint;
                             NSLog(@"[SFM] 匹配文字:%@ 下方检测到橙色，点击位置:%@", label.text, NSStringFromCGPoint(tapPoint));
+                            // 调试：显示点击特效
+                            showDebugTapDot(tapPoint);
                             simulateTapAtPoint(tapPoint);
                             return;  // 每次只点第一个橙色匹配
                         } else if (isGrayColor(color)) {
@@ -401,6 +468,7 @@ static UIView *createSecondaryView(void) {
         [g_execBtn setTitle:@"⏸" forState:UIControlStateNormal];
         g_execBtn.backgroundColor = [UIColor colorWithRed:0.7 green:0.2 blue:0.2 alpha:0.4];
         if (g_scanTimer) { dispatch_source_cancel(g_scanTimer); g_scanTimer = nil; }
+        clearDebugMarks();  // 清除调试标记
         NSLog(@"[SFM] 执行已暂停");
     }
     [[NSUserDefaults standardUserDefaults] setBool:g_isExecuting forKey:kConfigEnabled];
