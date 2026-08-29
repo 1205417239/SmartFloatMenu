@@ -132,7 +132,8 @@ static void clearDebugMarks(void) {
 static UIImage *captureFullScreen(void) {
     UIWindow *keyWindow = getKeyWindow();
     if (!keyWindow) return nil;
-    UIGraphicsBeginImageContext(keyWindow.bounds.size);
+    // 用 UIGraphicsBeginImageContextWithOptions，scale=0 自动适配 Retina
+    UIGraphicsBeginImageContextWithOptions(keyWindow.bounds.size, NO, 0);
     [keyWindow drawViewHierarchyInRect:keyWindow.bounds afterScreenUpdates:NO];
     UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
@@ -231,22 +232,24 @@ static void scanAndClick(void) {
     
     request.recognitionLevel = VNRequestTextRecognitionLevelAccurate; // 准确模式
     request.usesLanguageCorrection = YES; // 使用语言校正
+    // 设置最小文字高度
+    if ([request respondsToSelector:@selector(setMinimumTextHeight:)]) {
+        [request setValue:@(0.01) forKey:@"minimumTextHeight"];
+    }
     // 设置识别语言为中文和英文
     if ([request respondsToSelector:@selector(setRecognitionLanguages:)]) {
         [request setValue:@[@"zh-Hans", @"en-US"] forKey:@"recognitionLanguages"];
     }
     
-    // 执行识别（在后台线程）
+    // 执行识别（同步执行，确保对象不被释放）
     if (!screenshot.CGImage) {
         SFMLog(@"[调试] CGImage 为 nil，跳过 OCR");
         return;
     }
     VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:screenshot.CGImage options:@{}];
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        NSError *reqError = nil;
-        BOOL success = [handler performRequests:@[request] error:&reqError];
-        SFMLog(@"[调试] performRequests 完成，success=%d, error=%@", success, reqError);
-    });
+    NSError *reqError = nil;
+    BOOL success = [handler performRequests:@[request] error:&reqError];
+    SFMLog(@"[调试] performRequests 完成，success=%d, error=%@", success, reqError);
 }
 
 #pragma mark - 事件处理
