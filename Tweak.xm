@@ -163,28 +163,48 @@ static void clearDebugMarks(void) {
 }
 
 #pragma mark - 识字辨色点击
+static int g_scanCount = 0;
 static void scanAndClick(void) {
     if (!g_isExecuting) return;
+    g_scanCount++;
+    SFMLog(@"扫描 #%d 开始", g_scanCount);
     NSString *targetText1 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText1];
     NSString *targetText2 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText2];
-    if ((!targetText1 || targetText1.length == 0) && (!targetText2 || targetText2.length == 0)) return;
+    SFMLog(@"目标文字1: '%@', 目标文字2: '%@'", targetText1, targetText2);
+    if ((!targetText1 || targetText1.length == 0) && (!targetText2 || targetText2.length == 0)) {
+        SFMLog(@"目标文字为空，跳过扫描");
+        return;
+    }
+    
+    int windowCount = 0;
+    int viewCount = 0;
+    int labelCount = 0;
+    int matchCount = 0;
     
     for (UIWindow *keyWindow in [UIApplication sharedApplication].windows) {
-        if (keyWindow.hidden || keyWindow.alpha < 0.1) continue;
+        windowCount++;
+        if (keyWindow.hidden || keyWindow.alpha < 0.1) {
+            SFMLog(@"  window #%d 隐藏或透明，跳过", windowCount);
+            continue;
+        }
+        SFMLog(@"  window #%d: %@, bounds: %.0fx%.0f", windowCount, keyWindow, keyWindow.bounds.size.width, keyWindow.bounds.size.height);
         NSMutableArray *queue = [NSMutableArray arrayWithArray:keyWindow.subviews];
         while (queue.count > 0) {
             UIView *view = queue.firstObject;
             [queue removeObjectAtIndex:0];
+            viewCount++;
             if ([view isKindOfClass:[UILabel class]]) {
+                labelCount++;
                 UILabel *label = (UILabel *)view;
                 if (label.text && !label.hidden && label.alpha > 0.1) {
                     BOOL match = NO;
                     if (targetText1 && targetText1.length > 0 && [label.text containsString:targetText1]) match = YES;
                     if (targetText2 && targetText2.length > 0 && [label.text containsString:targetText2]) match = YES;
                     if (match) {
+                        matchCount++;
                         CGRect labelFrame = [label convertRect:label.bounds toView:nil];
                         showDebugRect(CGRectMake(labelFrame.origin.x - 5, labelFrame.origin.y - 5, labelFrame.size.width + 10, labelFrame.size.height + 10));
-                        SFMLog(@"识别到文字: '%@'，位置: (%.0f, %.0f)", label.text, labelFrame.origin.x, labelFrame.origin.y);
+                        SFMLog(@"    匹配文字 #%d: '%@'，位置: (%.0f, %.0f)，大小: %.0fx%.0f", matchCount, label.text, labelFrame.origin.x, labelFrame.origin.y, labelFrame.size.width, labelFrame.size.height);
                         CGFloat bodyHeight = labelFrame.size.height;
                         CGFloat checkX = labelFrame.origin.x + labelFrame.size.width / 2;
                         CGFloat checkY = labelFrame.origin.y + labelFrame.size.height + bodyHeight;
@@ -192,11 +212,12 @@ static void scanAndClick(void) {
                         UIColor *color = getColorAtPoint(checkPoint);
                         CGFloat r, g, b, a;
                         [color getRed:&r green:&g blue:&b alpha:&a];
-                        SFMLog(@"检查颜色: (%.0f, %.0f) = R:%.2f G:%.2f B:%.2f, 橙色: %d", checkPoint.x, checkPoint.y, r, g, b, isOrangeColor(color));
+                        SFMLog(@"    检查点: (%.0f, %.0f)，颜色: R:%.2f G:%.2f B:%.2f，是橙色: %d", checkPoint.x, checkPoint.y, r, g, b, isOrangeColor(color));
                         if (isOrangeColor(color)) {
                             showDebugTapDot(checkPoint);
                             simulateTapAtPoint(checkPoint);
-                            SFMLog(@"执行点击: (%.0f, %.0f)", checkPoint.x, checkPoint.y);
+                            SFMLog(@"    执行点击: (%.0f, %.0f)", checkPoint.x, checkPoint.y);
+                            SFMLog(@"扫描 #%d 结束（已点击），window: %d, view: %d, label: %d, match: %d", g_scanCount, windowCount, viewCount, labelCount, matchCount);
                             return;
                         }
                     }
@@ -207,6 +228,7 @@ static void scanAndClick(void) {
             }
         }
     }
+    SFMLog(@"扫描 #%d 结束，window: %d, view: %d, label: %d, match: %d", g_scanCount, windowCount, viewCount, labelCount, matchCount);
 }
 
 #pragma mark - 事件处理
