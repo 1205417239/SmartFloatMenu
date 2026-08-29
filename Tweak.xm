@@ -7,7 +7,11 @@ static UIWindow *getKeyWindow(void) {
     for (UIWindow *w in [UIApplication sharedApplication].windows) {
         if (w.isKeyWindow && !w.isHidden) return w;
     }
-    return [UIApplication sharedApplication].keyWindow;
+    // 兜底：返回第一个可见window
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        if (!w.isHidden) return w;
+    }
+    return nil;
 }
 
 // 配置存储 key
