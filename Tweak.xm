@@ -26,14 +26,16 @@ static UIView *g_debugOverlay = nil;
 static UIView *g_debugRect = nil;
 static UIView *g_debugTapDot = nil;
 
-#pragma mark - PassthroughWindow（点击穿透，只有菜单接收触摸）
+#pragma mark - PassthroughWindow（点击穿透，只有菜单和二级菜单接收触摸）
 @interface PassthroughWindow : UIWindow
 @property (nonatomic, weak) UIView *menuView;
+@property (nonatomic, weak) UIView *secondaryView;
 @end
 @implementation PassthroughWindow
 - (UIView *)hitTest:(CGPoint)pt withEvent:(UIEvent *)event {
     UIView *hit = [super hitTest:pt withEvent:event];
     if (hit == self.menuView || [hit isDescendantOfView:self.menuView]) return hit;
+    if (self.secondaryView && !self.secondaryView.hidden && (hit == self.secondaryView || [hit isDescendantOfView:self.secondaryView])) return hit;
     return nil;
 }
 @end
@@ -516,6 +518,7 @@ static UIView *createSecondaryView(void) {
     
     g_secondaryView = createSecondaryView();
     [root.view addSubview:g_secondaryView];
+    self.overlayWindow.secondaryView = g_secondaryView;
     
     [g_execBtn addTarget:[SFMHandler class] action:@selector(execBtnTapped:) forControlEvents:UIControlEventTouchUpInside];
     [g_saveBtn addTarget:[SFMHandler class] action:@selector(saveBtnTapped) forControlEvents:UIControlEventTouchUpInside];
