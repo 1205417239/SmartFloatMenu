@@ -42,13 +42,6 @@ static UIView *g_debugRect = nil;
 static UIView *g_debugTapDot = nil;
 
 #pragma mark - 颜色判断
-static BOOL isOrangeColor(UIColor *color) {
-    if (!color) return NO;
-    CGFloat r, g, b, a;
-    [color getRed:&r green:&g blue:&b alpha:&a];
-    return r > 0.7 && g > 0.28 && g < 0.52 && b < 0.42 && (r - g) > 0.25;
-}
-
 #pragma mark - 获取keyWindow
 static UIWindow *getKeyWindow(void) {
     NSArray *windows = [UIApplication sharedApplication].windows;
@@ -74,34 +67,6 @@ static UIViewController *topViewController(void) {
 }
 
 #pragma mark - 截图取色
-static UIColor *getColorAtPoint(CGPoint point) {
-    UIWindow *keyWindow = getKeyWindow();
-    if (!keyWindow) return [UIColor clearColor];
-    CGRect captureRect = CGRectMake(point.x - 1, point.y - 1, 3, 3);
-    UIGraphicsBeginImageContext(captureRect.size);
-    CGContextRef context = UIGraphicsGetCurrentContext();
-    CGContextTranslateCTM(context, -captureRect.origin.x, -captureRect.origin.y);
-    [keyWindow drawViewHierarchyInRect:keyWindow.bounds afterScreenUpdates:NO];
-    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    if (!image) return [UIColor clearColor];
-    CGImageRef cgImage = image.CGImage;
-    CFDataRef data = CGDataProviderCopyData(CGImageGetDataProvider(cgImage));
-    if (!data) return [UIColor clearColor];
-    const UInt8 *rawData = CFDataGetBytePtr(data);
-    NSUInteger bytesPerPixel = 4;
-    NSUInteger pixelIndex = 1 * (3 * bytesPerPixel) + 1 * bytesPerPixel;
-    if (pixelIndex + 2 < CFDataGetLength(data)) {
-        CGFloat red = rawData[pixelIndex] / 255.0;
-        CGFloat green = rawData[pixelIndex + 1] / 255.0;
-        CGFloat blue = rawData[pixelIndex + 2] / 255.0;
-        CFRelease(data);
-        return [UIColor colorWithRed:red green:green blue:blue alpha:1.0];
-    }
-    CFRelease(data);
-    return [UIColor clearColor];
-}
-
 #pragma mark - 模拟点击
 static void simulateTapAtPoint(CGPoint point) {
     UIWindow *keyWindow = getKeyWindow();
