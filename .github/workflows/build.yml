@@ -1,0 +1,40 @@
+name: Build SmartFloatMenu
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Theos
+      run: |
+        brew install ldid xz
+        git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
+        echo "THEOS=$THEOS" >> $GITHUB_ENV
+        echo "SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
+      env:
+        THEOS: ${{ github.workspace }}/theos
+
+    - name: Build
+      run: |
+        export THEOS=${{ github.workspace }}/theos
+        export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+        make clean package FINALPACKAGE=1
+      env:
+        THEOS: ${{ github.workspace }}/theos
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: SmartFloatMenu-build
+        path: |
+          packages/*.deb
+          *.dylib
+        if-no-files-found: error

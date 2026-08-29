@@ -1,0 +1,9 @@
+Package: com.smartfloat.menu
+Name: SmartFloatMenu
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: 立式悬浮菜单 - 识字辨颜色点击
+Maintainer: User
+Author: User
+Section: Tweaks
+Depends: mobilesubstrate
