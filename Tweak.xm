@@ -7,9 +7,14 @@
 @end
 @implementation FloatingOverlayWindow
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    UIView *hitView = [super hitTest:point withEvent:event];
-    if (hitView == self) return nil;  // 空白区域穿透到下层App
-    return hitView;
+    // 只有点击在子视图上时才响应，否则穿透到下层App
+    for (UIView *subview in self.subviews) {
+        if (!subview.hidden && CGRectContainsPoint(subview.frame, point)) {
+            UIView *hit = [subview hitTest:point withEvent:event];
+            if (hit) return hit;
+        }
+    }
+    return nil;
 }
 - (BOOL)_canAffectStatusBarAppearance { return NO; }
 @end
@@ -584,6 +589,7 @@ static void installFloatMenu(void) {
         g_overlayWindow.windowLevel = UIWindowLevelAlert + 100;
         g_overlayWindow.hidden = NO;
         g_overlayWindow.backgroundColor = [UIColor clearColor];
+        g_overlayWindow.rootViewController = [[UIViewController alloc] init];
     }
     
     CGSize screenSize = [UIScreen mainScreen].bounds.size;
@@ -597,19 +603,18 @@ static void installFloatMenu(void) {
     g_secondaryView = createSecondaryView();
     [g_overlayWindow addSubview:g_secondaryView];
     
+    // 执行按钮点击（用UIButton，更可靠）
+    [g_execBtn addTarget:[SFMHandler class] action:@selector(execBtnTapped:) forControlEvents:UIControlEventTouchUpInside];
+    
     // 保存按钮
     [g_saveBtn addTarget:[SFMHandler class] action:@selector(saveBtnTapped) forControlEvents:UIControlEventTouchUpInside];
     
-    // 点击手势：切换执行/暂停
-    UITapGestureRecognizer *menuTap = [[UITapGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(execBtnTapped:)];
-    [g_floatMenu addGestureRecognizer:menuTap];
-    
-    // 长按呼出二级菜单
+    // 长按呼出二级菜单（添加到菜单背景，不影响按钮）
     g_longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(handleLongPress:)];
     g_longPress.minimumPressDuration = 0.6;
     [g_floatMenu addGestureRecognizer:g_longPress];
     
-    // 拖动手势
+    // 拖动手势（添加到菜单背景）
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(handlePan:)];
     [g_floatMenu addGestureRecognizer:pan];
     
