@@ -160,10 +160,11 @@ static void scanAndClick(void) {
         SFMLog(@"扫描 #%d: 截图失败", g_scanCount);
         return;
     }
-    SFMLog(@"[调试] 截图成功，尺寸: %.0fx%.0f", screenshot.size.width, screenshot.size.height);
+    SFMLog(@"[调试] 截图成功，尺寸: %.0fx%.0f, CGImage=%p", screenshot.size.width, screenshot.size.height, screenshot.CGImage);
     
     // 用Vision框架OCR识别文字
     VNRecognizeTextRequest *request = [[VNRecognizeTextRequest alloc] initWithCompletionHandler:^(VNRequest *request, NSError *error) {
+        SFMLog(@"[调试] OCR completion handler 被调用，error=%@", error);
         if (error) {
             SFMLog(@"扫描 #%d: OCR错误: %@", g_scanCount, error.localizedDescription);
             return;
@@ -236,9 +237,15 @@ static void scanAndClick(void) {
     }
     
     // 执行识别（在后台线程）
+    if (!screenshot.CGImage) {
+        SFMLog(@"[调试] CGImage 为 nil，跳过 OCR");
+        return;
+    }
     VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:screenshot.CGImage options:@{}];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        [handler performRequests:@[request] error:nil];
+        NSError *reqError = nil;
+        BOOL success = [handler performRequests:@[request] error:&reqError];
+        SFMLog(@"[调试] performRequests 完成，success=%d, error=%@", success, reqError);
     });
 }
 
