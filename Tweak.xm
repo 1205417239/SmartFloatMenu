@@ -3,16 +3,16 @@
 #import <objc/runtime.h>
 
 // 配置存储 key
-static NSString *const kConfigText = @"SFM_configText";
-static NSString *const kConfigColor = @"SFM_configColor";
+static NSString *const kConfigText1 = @"SFM_configText1";
+static NSString *const kConfigText2 = @"SFM_configText2";
 static NSString *const kConfigEnabled = @"SFM_configEnabled";
 
 // 全局状态
 static BOOL g_isExecuting = NO;
-static BOOL g_secondaryExpanded = NO;
-static UIView *g_floatMenu = nil;
+static BOOL g_isCollapsed = NO;  // 收纳状态
+static UIView *g_floatMenu = nil;       // 正方形菜单
 static UIButton *g_execBtn = nil;
-static UILabel *g_timeLabel = nil;
+static UILabel *g_timeLabel = nil;      // 时间标签（菜单下方）
 static UIView *g_secondaryView = nil;
 static UITextField *g_textField1 = nil;
 static UITextField *g_textField2 = nil;
@@ -20,69 +20,32 @@ static UIButton *g_saveBtn = nil;
 static NSTimer *g_timeTimer = nil;
 static NSTimer *g_scanTimer = nil;
 static NSTimer *g_hideTimer = nil;
-static NSDate *g_lastActivityDate;
-
-#pragma mark - 颜色解析
-
-static UIColor *parseColor(NSString *colorStr) {
-    if (!colorStr || colorStr.length == 0) return nil;
-    NSString *s = [colorStr lowercaseString];
-    if ([s containsString:@"红"]) return [UIColor redColor];
-    if ([s containsString:@"蓝"]) return [UIColor blueColor];
-    if ([s containsString:@"绿"]) return [UIColor greenColor];
-    if ([s containsString:@"黄"]) return [UIColor yellowColor];
-    if ([s containsString:@"黑"]) return [UIColor blackColor];
-    if ([s containsString:@"白"]) return [UIColor whiteColor];
-    if ([s containsString:@"灰"]) return [UIColor grayColor];
-    if ([s containsString:@"橙"]) return [UIColor orangeColor];
-    if ([s containsString:@"紫"]) return [UIColor purpleColor];
-    if ([s containsString:@"棕"]) return [UIColor brownColor];
-    if ([s containsString:@"青"]) return [UIColor cyanColor];
-    // 十六进制
-    if ([s hasPrefix:@"#"] && s.length == 7) {
-        unsigned int rgb;
-        NSScanner *scanner = [NSScanner scannerWithString:[s substringFromIndex:1]];
-        [scanner scanHexInt:&rgb];
-        return [UIColor colorWithRed:((rgb>>16)&0xFF)/255.0 green:((rgb>>8)&0xFF)/255.0 blue:(rgb&0xFF)/255.0 alpha:1.0];
-    }
-    return nil;
-}
-
-static BOOL colorMatch(UIColor *c1, UIColor *c2) {
-    if (!c1 || !c2) return NO;
-    CGFloat r1,g1,b1,a1,r2,g2,b2,a2;
-    [c1 getRed:&r1 green:&g1 blue:&b1 alpha:&a1];
-    [c2 getRed:&r2 green:&g2 blue:&b2 alpha:&a2];
-    CGFloat diff = fabs(r1-r2)+fabs(g1-g2)+fabs(b1-b2);
-    return diff < 0.3; // 容差
-}
+static UILongPressGestureRecognizer *g_longPress = nil;
 
 #pragma mark - 网络时间
 
-static NSString *getNetworkTimeString(void) {
+static NSString *getTimeString(void) {
     NSDate *now = [NSDate date];
     NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
     [fmt setDateFormat:@"HH:mm:ss"];
-    [fmt setTimeZone:[NSTimeZone systemTimeZone]];
     return [fmt stringFromDate:now];
 }
 
 static void updateTimeLabel(void) {
     if (g_timeLabel) {
-        g_timeLabel.text = getNetworkTimeString();
+        g_timeLabel.text = getTimeString();
     }
 }
 
-#pragma mark - 识字辨颜色点击
+#pragma mark - 识字点击（两个文字都识别）
 
 static void scanAndClick(void) {
     if (!g_isExecuting) return;
     
-    NSString *targetText = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText];
-    NSString *targetColorStr = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigColor];
-    UIColor *targetColor = parseColor(targetColorStr);
+    NSString *targetText1 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText1];
+    NSString *targetText2 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText2];
     
-    if (!targetText || targetText.length == 0) return;
+    if ((!targetText1 || targetText1.length == 0) && (!targetText2 || targetText2.length == 0)) return;
     
     UIWindow *keyWindow = nil;
     for (UIWindow *w in [UIApplication sharedApplication].windows) {
@@ -90,7 +53,6 @@ static void scanAndClick(void) {
     }
     if (!keyWindow) return;
     
-    // 遍历所有视图查找匹配的UILabel
     NSMutableArray *queue = [NSMutableArray arrayWithArray:keyWindow.subviews];
     while (queue.count > 0) {
         UIView *view = queue.firstObject;
@@ -98,28 +60,21 @@ static void scanAndClick(void) {
         
         if ([view isKindOfClass:[UILabel class]]) {
             UILabel *label = (UILabel *)view;
-            if (label.text && [label.text containsString:targetText]) {
-                // 检查颜色
-                BOOL colorOk = YES;
-                if (targetColor) {
-                    colorOk = colorMatch(label.textColor, targetColor);
-                }
-                if (colorOk && !label.hidden && label.alpha > 0.1) {
-                    // 点击label中心
+            if (label.text && !label.hidden && label.alpha > 0.1) {
+                BOOL match = NO;
+                if (targetText1 && targetText1.length > 0 && [label.text containsString:targetText1]) match = YES;
+                if (targetText2 && targetText2.length > 0 && [label.text containsString:targetText2]) match = YES;
+                
+                if (match) {
                     CGPoint center = [label convertPoint:label.center toView:nil];
-                    NSLog(@"[SFM] 匹配到文字:%@ 颜色:%@ 位置:%@", label.text, targetColorStr, NSStringFromCGPoint(center));
-                    
-                    // 模拟点击
-                    UITouch *touch = [[UITouch alloc] init];
-                    // 用更直接的方式：发送事件
-                    UIEvent *event = [[UIEvent alloc] init];
-                    // 实际上，我们用hitTest找到目标view并发送touchesEnded
+                    NSLog(@"[SFM] 匹配到文字:%@ 位置:%@", label.text, NSStringFromCGPoint(center));
                     UIView *hitView = [keyWindow hitTest:center withEvent:nil];
                     if (hitView) {
-                        // 模拟点击
+                        UITouch *touch = [[UITouch alloc] init];
+                        UIEvent *event = [[UIEvent alloc] init];
                         [hitView touchesEnded:[NSSet setWithObject:touch] withEvent:event];
                     }
-                    return; // 每次只点第一个匹配
+                    return;
                 }
             }
         }
@@ -130,130 +85,167 @@ static void scanAndClick(void) {
     }
 }
 
-#pragma mark - 自动吸附侧边
+#pragma mark - 收纳/展开
 
-static void snapToSide(void) {
-    if (!g_floatMenu) return;
-    UIWindow *window = (UIWindow *)g_floatMenu.superview;
-    if (!window) return;
+static void collapseToSide(void) {
+    if (g_isCollapsed || !g_floatMenu) return;
+    g_isCollapsed = YES;
     
-    CGFloat centerX = g_floatMenu.center.x;
+    UIWindow *window = (UIWindow *)g_floatMenu.superview;
     CGFloat screenW = window.bounds.size.width;
-    CGFloat targetX = (centerX < screenW/2) ? 35 : screenW - 35;
+    CGFloat screenH = window.bounds.size.height;
+    
+    // 隐藏正方形菜单，只显示时间
+    g_floatMenu.hidden = YES;
+    
+    // 时间标签放到侧边
+    CGFloat timeW = 70;
+    CGFloat timeH = 20;
+    CGFloat targetX = (g_floatMenu.center.x < screenW/2) ? 0 : screenW - timeW;
+    CGFloat targetY = MIN(MAX(g_floatMenu.center.y, 100), screenH - 100);
     
     [UIView animateWithDuration:0.3 animations:^{
-        g_floatMenu.center = CGPointMake(targetX, g_floatMenu.center.y);
+        g_timeLabel.frame = CGRectMake(targetX, targetY, timeW, timeH);
     }];
+    
+    g_timeLabel.hidden = NO;
+    g_timeLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
+    g_timeLabel.textColor = [UIColor whiteColor];
+    g_timeLabel.layer.cornerRadius = 4;
+    g_timeLabel.layer.masksToBounds = YES;
+    
+    NSLog(@"[SFM] 已收纳到侧边");
+}
+
+static void expandFromSide(void) {
+    if (!g_isCollapsed || !g_floatMenu) return;
+    g_isCollapsed = NO;
+    
+    UIWindow *window = (UIWindow *)g_floatMenu.superview;
+    CGFloat screenW = window.bounds.size.width;
+    
+    // 显示正方形菜单
+    g_floatMenu.hidden = NO;
+    
+    // 菜单位置从时间标签位置恢复
+    CGFloat menuX = (g_timeLabel.frame.origin.x < screenW/2) ? 35 : screenW - 35;
+    CGFloat menuY = g_timeLabel.center.y;
+    
+    g_floatMenu.center = CGPointMake(menuX, menuY);
+    
+    // 时间标签恢复到菜单下方
+    CGFloat timeW = 60;
+    CGFloat timeH = 18;
+    g_timeLabel.frame = CGRectMake(g_floatMenu.frame.origin.x - 5, g_floatMenu.frame.origin.y + g_floatMenu.frame.size.height + 2, timeW, timeH);
+    g_timeLabel.backgroundColor = [UIColor clearColor];
+    g_timeLabel.textColor = [UIColor whiteColor];
+    g_timeLabel.layer.cornerRadius = 0;
+    
+    NSLog(@"[SFM] 已展开");
 }
 
 static void resetHideTimer(void) {
-    g_lastActivityDate = [NSDate date];
     if (g_hideTimer) {
         [g_hideTimer invalidate];
         g_hideTimer = nil;
     }
     g_hideTimer = [NSTimer scheduledTimerWithTimeInterval:5.0 repeats:NO block:^(NSTimer *t) {
-        snapToSide();
+        collapseToSide();
     }];
 }
 
 #pragma mark - 悬浮菜单创建
 
 static UIView *createFloatMenu(void) {
-    UIView *menu = [[UIView alloc] initWithFrame:CGRectMake(0, 100, 70, 100)];
-    menu.backgroundColor = [UIColor colorWithRed:0.9 green:0.2 blue:0.2 alpha:0.85];
+    // 正方形菜单，尺寸50x50
+    CGFloat menuSize = 50;
+    UIView *menu = [[UIView alloc] initWithFrame:CGRectMake(0, 0, menuSize, menuSize)];
+    menu.backgroundColor = [UIColor clearColor];
     menu.layer.cornerRadius = 12;
-    menu.layer.borderWidth = 1;
-    menu.layer.borderColor = [UIColor whiteColor].CGColor;
+    menu.layer.borderWidth = 1.5;
+    menu.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.6].CGColor;
     
-    // 执行按钮
+    // 执行按钮占满整个正方形
     g_execBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    g_execBtn.frame = CGRectMake(15, 10, 40, 40);
-    g_execBtn.titleLabel.font = [UIFont systemFontOfSize:20];
+    g_execBtn.frame = CGRectMake(0, 0, menuSize, menuSize);
+    g_execBtn.titleLabel.font = [UIFont systemFontOfSize:22];
     [g_execBtn setTitle:@"⏸" forState:UIControlStateNormal];
-    [g_execBtn addTarget:nil action:@selector(execBtnTapped) forControlEvents:UIControlEventTouchUpInside];
+    g_execBtn.layer.cornerRadius = 12;
+    g_execBtn.layer.masksToBounds = YES;
     [menu addSubview:g_execBtn];
     
-    // 网络时间标签
-    g_timeLabel = [[UILabel alloc] initWithFrame:CGRectMake(2, 55, 66, 20)];
-    g_timeLabel.font = [UIFont systemFontOfSize:10];
+    // 时间标签在正方形下方
+    g_timeLabel = [[UILabel alloc] initWithFrame:CGRectMake(-5, menuSize + 2, 60, 18)];
+    g_timeLabel.font = [UIFont systemFontOfSize:11];
     g_timeLabel.textColor = [UIColor whiteColor];
     g_timeLabel.textAlignment = NSTextAlignmentCenter;
-    g_timeLabel.text = getNetworkTimeString();
+    g_timeLabel.text = getTimeString();
     [menu addSubview:g_timeLabel];
-    
-    // 展开/收起提示（底部小箭头）
-    UILabel *arrowLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 78, 70, 15)];
-    arrowLabel.text = @"▼";
-    arrowLabel.font = [UIFont systemFontOfSize:10];
-    arrowLabel.textColor = [UIColor whiteColor];
-    arrowLabel.textAlignment = NSTextAlignmentCenter;
-    [menu addSubview:arrowLabel];
     
     return menu;
 }
 
 static UIView *createSecondaryView(void) {
-    UIView *sec = [[UIView alloc] initWithFrame:CGRectMake(0, 100, 200, 160)];
-    sec.backgroundColor = [UIColor colorWithRed:1.0 green:0.9 blue:0.2 alpha:0.92];
+    UIView *sec = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 170)];
+    sec.backgroundColor = [UIColor colorWithRed:1.0 green:0.95 blue:0.3 alpha:0.95];
     sec.layer.cornerRadius = 12;
     sec.layer.borderWidth = 1;
     sec.layer.borderColor = [UIColor orangeColor].CGColor;
     sec.hidden = YES;
     
-    // 输入框1 - 识别文字
-    UILabel *label1 = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, 80, 20)];
-    label1.text = @"识别文字:";
+    // 输入框1 - 识别文字1
+    UILabel *label1 = [[UILabel alloc] initWithFrame:CGRectMake(12, 10, 100, 20)];
+    label1.text = @"识别文字1:";
     label1.font = [UIFont systemFontOfSize:12];
     label1.textColor = [UIColor blackColor];
     [sec addSubview:label1];
     
-    g_textField1 = [[UITextField alloc] initWithFrame:CGRectMake(10, 30, 180, 30)];
+    g_textField1 = [[UITextField alloc] initWithFrame:CGRectMake(12, 32, 196, 32)];
     g_textField1.borderStyle = UITextBorderStyleRoundedRect;
     g_textField1.font = [UIFont systemFontOfSize:13];
-    g_textField1.placeholder = @"输入要识别的文字";
+    g_textField1.placeholder = @"输入要识别的文字1";
     g_textField1.backgroundColor = [UIColor whiteColor];
-    NSString *savedText = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText];
-    if (savedText) g_textField1.text = savedText;
+    NSString *saved1 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText1];
+    if (saved1) g_textField1.text = saved1;
     [sec addSubview:g_textField1];
     
-    // 输入框2 - 识别颜色
-    UILabel *label2 = [[UILabel alloc] initWithFrame:CGRectMake(10, 65, 80, 20)];
-    label2.text = @"识别颜色:";
+    // 输入框2 - 识别文字2
+    UILabel *label2 = [[UILabel alloc] initWithFrame:CGRectMake(12, 70, 100, 20)];
+    label2.text = @"识别文字2:";
     label2.font = [UIFont systemFontOfSize:12];
     label2.textColor = [UIColor blackColor];
     [sec addSubview:label2];
     
-    g_textField2 = [[UITextField alloc] initWithFrame:CGRectMake(10, 87, 180, 30)];
+    g_textField2 = [[UITextField alloc] initWithFrame:CGRectMake(12, 92, 196, 32)];
     g_textField2.borderStyle = UITextBorderStyleRoundedRect;
     g_textField2.font = [UIFont systemFontOfSize:13];
-    g_textField2.placeholder = @"如:红色/蓝色/#FF0000";
+    g_textField2.placeholder = @"输入要识别的文字2";
     g_textField2.backgroundColor = [UIColor whiteColor];
-    NSString *savedColor = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigColor];
-    if (savedColor) g_textField2.text = savedColor;
+    NSString *saved2 = [[NSUserDefaults standardUserDefaults] stringForKey:kConfigText2];
+    if (saved2) g_textField2.text = saved2;
     [sec addSubview:g_textField2];
     
     // 保存按钮
     g_saveBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    g_saveBtn.frame = CGRectMake(130, 125, 60, 28);
+    g_saveBtn.frame = CGRectMake(148, 132, 60, 28);
     [g_saveBtn setTitle:@"保存" forState:UIControlStateNormal];
     g_saveBtn.titleLabel.font = [UIFont boldSystemFontOfSize:14];
     g_saveBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:1.0 alpha:1.0];
     [g_saveBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     g_saveBtn.layer.cornerRadius = 6;
-    [g_saveBtn addTarget:nil action:@selector(saveBtnTapped) forControlEvents:UIControlEventTouchUpInside];
     [sec addSubview:g_saveBtn];
     
     return sec;
 }
 
-#pragma mark - 按钮事件
+#pragma mark - 事件处理
 
 @interface SFMHandler : NSObject
 + (void)execBtnTapped;
 + (void)saveBtnTapped;
-+ (void)menuTapped;
++ (void)handleLongPress:(UILongPressGestureRecognizer *)gesture;
 + (void)handlePan:(UIPanGestureRecognizer *)pan;
++ (void)timeLabelTapped;
 @end
 
 @implementation SFMHandler
@@ -262,15 +254,14 @@ static UIView *createSecondaryView(void) {
     g_isExecuting = !g_isExecuting;
     if (g_isExecuting) {
         [g_execBtn setTitle:@"▶️" forState:UIControlStateNormal];
-        g_execBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:0.6];
-        // 启动扫描定时器
+        g_execBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.2 alpha:0.5];
         g_scanTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
             scanAndClick();
         }];
         NSLog(@"[SFM] 执行已开启");
     } else {
         [g_execBtn setTitle:@"⏸" forState:UIControlStateNormal];
-        g_execBtn.backgroundColor = [UIColor clearColor];
+        g_execBtn.backgroundColor = [UIColor colorWithRed:0.7 green:0.2 blue:0.2 alpha:0.4];
         if (g_scanTimer) { [g_scanTimer invalidate]; g_scanTimer = nil; }
         NSLog(@"[SFM] 执行已暂停");
     }
@@ -280,38 +271,34 @@ static UIView *createSecondaryView(void) {
 }
 
 + (void)saveBtnTapped {
-    NSString *text = g_textField1.text;
-    NSString *color = g_textField2.text;
-    [[NSUserDefaults standardUserDefaults] setObject:text forKey:kConfigText];
-    [[NSUserDefaults standardUserDefaults] setObject:color forKey:kConfigColor];
+    NSString *text1 = g_textField1.text;
+    NSString *text2 = g_textField2.text;
+    [[NSUserDefaults standardUserDefaults] setObject:text1 forKey:kConfigText1];
+    [[NSUserDefaults standardUserDefaults] setObject:text2 forKey:kConfigText2];
     [[NSUserDefaults standardUserDefaults] synchronize];
-    NSLog(@"[SFM] 配置已保存: 文字=%@ 颜色=%@", text, color);
+    NSLog(@"[SFM] 配置已保存: 文字1=%@ 文字2=%@", text1, text2);
     
-    // 关闭二级菜单
-    g_secondaryExpanded = NO;
     g_secondaryView.hidden = YES;
-    
-    // 收起键盘
     [g_textField1 resignFirstResponder];
     [g_textField2 resignFirstResponder];
-    
     resetHideTimer();
 }
 
-+ (void)menuTapped {
-    // 展开/收起二级菜单
-    g_secondaryExpanded = !g_secondaryExpanded;
-    g_secondaryView.hidden = !g_secondaryExpanded;
-    if (g_secondaryExpanded) {
-        // 定位二级菜单位置
++ (void)handleLongPress:(UILongPressGestureRecognizer *)gesture {
+    if (gesture.state == UIGestureRecognizerStateBegan) {
+        NSLog(@"[SFM] 长按呼出二级菜单");
+        g_secondaryView.hidden = NO;
+        
         UIWindow *window = (UIWindow *)g_floatMenu.superview;
         CGFloat x = g_floatMenu.frame.origin.x;
-        CGFloat y = g_floatMenu.frame.origin.y + g_floatMenu.frame.size.height + 5;
+        CGFloat y = g_floatMenu.frame.origin.y + g_floatMenu.frame.size.height + 25;
         CGFloat screenW = window.bounds.size.width;
-        if (x + 200 > screenW) x = screenW - 210;
-        g_secondaryView.frame = CGRectMake(x, y, 200, 160);
+        if (x + 220 > screenW) x = screenW - 230;
+        if (x < 10) x = 10;
+        g_secondaryView.frame = CGRectMake(x, y, 220, 170);
+        [window bringSubviewToFront:g_secondaryView];
+        resetHideTimer();
     }
-    resetHideTimer();
 }
 
 + (void)handlePan:(UIPanGestureRecognizer *)pan {
@@ -322,21 +309,34 @@ static UIView *createSecondaryView(void) {
     if (pan.state == UIGestureRecognizerStateBegan || pan.state == UIGestureRecognizerStateChanged) {
         view.center = CGPointMake(view.center.x + translation.x, view.center.y + translation.y);
         [pan setTranslation:CGPointZero inView:window];
+        
+        // 时间标签跟随
+        CGFloat timeW = 60;
+        CGFloat timeH = 18;
+        g_timeLabel.frame = CGRectMake(view.frame.origin.x - 5, view.frame.origin.y + view.frame.size.height + 2, timeW, timeH);
+        
         // 二级菜单跟随
         if (!g_secondaryView.hidden) {
             CGFloat x = view.frame.origin.x;
-            CGFloat y = view.frame.origin.y + view.frame.size.height + 5;
+            CGFloat y = view.frame.origin.y + view.frame.size.height + 25;
             CGFloat screenW = window.bounds.size.width;
-            if (x + 200 > screenW) x = screenW - 210;
-            g_secondaryView.frame = CGRectMake(x, y, 200, 160);
+            if (x + 220 > screenW) x = screenW - 230;
+            if (x < 10) x = 10;
+            g_secondaryView.frame = CGRectMake(x, y, 220, 170);
         }
         resetHideTimer();
     }
 }
 
++ (void)timeLabelTapped {
+    NSLog(@"[SFM] 点击时间标签，展开菜单");
+    expandFromSide();
+    resetHideTimer();
+}
+
 @end
 
-#pragma mark - 安装悬浮菜单
+#pragma mark - 安装
 
 static void installFloatMenu(void) {
     if (g_floatMenu) return;
@@ -358,23 +358,26 @@ static void installFloatMenu(void) {
     [keyWindow addSubview:g_secondaryView];
     [keyWindow bringSubviewToFront:g_secondaryView];
     
-    // 给执行按钮设置target
-    [g_execBtn removeTarget:nil action:NULL forControlEvents:UIControlEventTouchUpInside];
+    // 执行按钮点击
     [g_execBtn addTarget:[SFMHandler class] action:@selector(execBtnTapped) forControlEvents:UIControlEventTouchUpInside];
     
-    // 给保存按钮设置target
-    [g_saveBtn removeTarget:nil action:NULL forControlEvents:UIControlEventTouchUpInside];
+    // 保存按钮
     [g_saveBtn addTarget:[SFMHandler class] action:@selector(saveBtnTapped) forControlEvents:UIControlEventTouchUpInside];
     
-    // 点击一级菜单展开二级菜单（用手势识别，避免和执行按钮冲突）
-    UITapGestureRecognizer *menuTap = [[UITapGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(menuTapped)];
-    menuTap.cancelsTouchesInView = NO;
-    [g_floatMenu addGestureRecognizer:menuTap];
+    // 长按呼出二级菜单
+    g_longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(handleLongPress:)];
+    g_longPress.minimumPressDuration = 0.6;
+    [g_floatMenu addGestureRecognizer:g_longPress];
     
     // 拖动手势
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(handlePan:)];
     pan.cancelsTouchesInView = NO;
     [g_floatMenu addGestureRecognizer:pan];
+    
+    // 时间标签点击（收纳状态下呼出）
+    UITapGestureRecognizer *timeTap = [[UITapGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(timeLabelTapped)];
+    [g_timeLabel addGestureRecognizer:timeTap];
+    g_timeLabel.userInteractionEnabled = YES;
     
     // 时间更新定时器
     g_timeTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
@@ -386,13 +389,15 @@ static void installFloatMenu(void) {
     if (savedEnabled) {
         g_isExecuting = YES;
         [g_execBtn setTitle:@"▶️" forState:UIControlStateNormal];
-        g_execBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:0.6];
+        g_execBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.2 alpha:0.5];
         g_scanTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
             scanAndClick();
         }];
+    } else {
+        g_execBtn.backgroundColor = [UIColor colorWithRed:0.7 green:0.2 blue:0.2 alpha:0.4];
     }
     
-    // 启动自动吸附计时
+    // 启动自动收纳计时
     resetHideTimer();
     
     NSLog(@"[SFM] 悬浮菜单已安装");
@@ -408,22 +413,6 @@ static void installFloatMenu(void) {
         installFloatMenu();
     });
     return result;
-}
-
-%end
-
-%hook UIWindow
-
-- (void)makeKeyAndVisible {
-    %orig;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (g_floatMenu && g_floatMenu.superview != self) {
-            [self addSubview:g_floatMenu];
-            [self addSubview:g_secondaryView];
-            [self bringSubviewToFront:g_floatMenu];
-            [self bringSubviewToFront:g_secondaryView];
-        }
-    });
 }
 
 %end
