@@ -21,6 +21,7 @@ static NSTimer *g_timeTimer = nil;
 static NSTimer *g_scanTimer = nil;
 static NSTimer *g_hideTimer = nil;
 static UILongPressGestureRecognizer *g_longPress = nil;
+static BOOL g_isVerticalTime = NO;  // 时间是否竖排显示
 
 #pragma mark - 网络时间
 
@@ -33,7 +34,18 @@ static NSString *getTimeString(void) {
 
 static void updateTimeLabel(void) {
     if (g_timeLabel) {
-        g_timeLabel.text = getTimeString();
+        NSString *timeStr = getTimeString();
+        if (g_isVerticalTime) {
+            // 竖排：时分秒从上到下，每行两个数字
+            NSArray *parts = [timeStr componentsSeparatedByString:@":"];
+            if (parts.count == 3) {
+                g_timeLabel.text = [NSString stringWithFormat:@"%@\n%@\n%@", parts[0], parts[1], parts[2]];
+            } else {
+                g_timeLabel.text = timeStr;
+            }
+        } else {
+            g_timeLabel.text = timeStr;
+        }
     }
 }
 
@@ -90,6 +102,7 @@ static void scanAndClick(void) {
 static void collapseToSide(void) {
     if (g_isCollapsed || !g_floatMenu) return;
     g_isCollapsed = YES;
+    g_isVerticalTime = YES;
     
     UIWindow *window = (UIWindow *)g_floatMenu.superview;
     CGFloat screenW = window.bounds.size.width;
@@ -104,41 +117,43 @@ static void collapseToSide(void) {
     // 隐藏正方形菜单
     g_floatMenu.hidden = YES;
     
-    // 时间标签竖立显示，吸附到边缘
+    // 时间标签竖排显示（时分秒从上到下），不旋转
     BOOL isLeft = (g_floatMenu.center.x < screenW/2);
     
     g_timeLabel.hidden = NO;
     g_timeLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.6];
     g_timeLabel.textColor = [UIColor whiteColor];
-    g_timeLabel.layer.cornerRadius = 4;
+    g_timeLabel.layer.cornerRadius = 6;
     g_timeLabel.layer.masksToBounds = YES;
-    g_timeLabel.bounds = CGRectMake(0, 0, 70, 20);
+    g_timeLabel.transform = CGAffineTransformIdentity;  // 不旋转
+    g_timeLabel.numberOfLines = 3;
+    g_timeLabel.font = [UIFont systemFontOfSize:12];
+    g_timeLabel.textAlignment = NSTextAlignmentCenter;
+    g_timeLabel.bounds = CGRectMake(0, 0, 28, 60);  // 窄长型
     
-    // 旋转90度竖立显示
-    g_timeLabel.transform = CGAffineTransformMakeRotation(isLeft ? M_PI_2 : -M_PI_2);
+    // 更新竖排文字
+    updateTimeLabel();
     
     // 位置：吸附到就近屏幕边缘
     CGFloat targetY = MIN(MAX(g_floatMenu.center.y, 120), screenH - 120);
     if (isLeft) {
-        g_timeLabel.center = CGPointMake(12, targetY);
+        g_timeLabel.center = CGPointMake(14, targetY);
     } else {
-        g_timeLabel.center = CGPointMake(screenW - 12, targetY);
+        g_timeLabel.center = CGPointMake(screenW - 14, targetY);
     }
     
     [window bringSubviewToFront:g_timeLabel];
     
-    NSLog(@"[SFM] 已收纳到侧边，时间竖立显示");
+    NSLog(@"[SFM] 已收纳到侧边，时间竖排显示");
 }
 
 static void expandFromSide(void) {
     if (!g_isCollapsed || !g_floatMenu) return;
     g_isCollapsed = NO;
+    g_isVerticalTime = NO;
     
     UIWindow *window = (UIWindow *)g_floatMenu.superview;
     CGFloat screenW = window.bounds.size.width;
-    
-    // 恢复旋转
-    g_timeLabel.transform = CGAffineTransformIdentity;
     
     // 显示正方形菜单
     g_floatMenu.hidden = NO;
@@ -153,7 +168,7 @@ static void expandFromSide(void) {
     [g_timeLabel removeFromSuperview];
     [g_floatMenu addSubview:g_timeLabel];
     
-    // 时间标签恢复到菜单下方，黑色字体
+    // 时间标签恢复到菜单下方，黑色字体，横排
     CGFloat timeW = 60;
     CGFloat timeH = 18;
     g_timeLabel.frame = CGRectMake(-5, g_floatMenu.bounds.size.height + 2, timeW, timeH);
@@ -161,6 +176,12 @@ static void expandFromSide(void) {
     g_timeLabel.textColor = [UIColor blackColor];
     g_timeLabel.layer.cornerRadius = 0;
     g_timeLabel.layer.masksToBounds = NO;
+    g_timeLabel.transform = CGAffineTransformIdentity;
+    g_timeLabel.numberOfLines = 1;
+    g_timeLabel.font = [UIFont systemFontOfSize:11];
+    
+    // 更新横排文字
+    updateTimeLabel();
     
     NSLog(@"[SFM] 已展开");
 }
@@ -267,6 +288,7 @@ static UIView *createSecondaryView(void) {
 + (void)handleLongPress:(UILongPressGestureRecognizer *)gesture;
 + (void)handlePan:(UIPanGestureRecognizer *)pan;
 + (void)timeLabelTapped;
++ (void)handleTimePan:(UIPanGestureRecognizer *)pan;
 @end
 
 @implementation SFMHandler
@@ -350,6 +372,31 @@ static UIView *createSecondaryView(void) {
     resetHideTimer();
 }
 
++ (void)handleTimePan:(UIPanGestureRecognizer *)pan {
+    if (!g_isCollapsed) return;  // 只有收纳状态下才能拖动时间
+    
+    UIView *view = pan.view;
+    UIWindow *window = (UIWindow *)view.superview;
+    CGPoint translation = [pan translationInView:window];
+    
+    if (pan.state == UIGestureRecognizerStateBegan || pan.state == UIGestureRecognizerStateChanged) {
+        // 上下拖动
+        CGFloat newY = view.center.y + translation.y;
+        CGFloat screenH = window.bounds.size.height;
+        newY = MAX(80, MIN(screenH - 80, newY));
+        view.center = CGPointMake(view.center.x, newY);
+        [pan setTranslation:CGPointZero inView:window];
+    } else if (pan.state == UIGestureRecognizerStateEnded || pan.state == UIGestureRecognizerStateCancelled) {
+        // 拖动结束，就近吸附到左或右边缘
+        CGFloat screenW = window.bounds.size.width;
+        CGFloat targetX = (view.center.x < screenW/2) ? 14 : screenW - 14;
+        [UIView animateWithDuration:0.25 animations:^{
+            view.center = CGPointMake(targetX, view.center.y);
+        }];
+        NSLog(@"[SFM] 时间标签拖动结束，就近吸附");
+    }
+}
+
 @end
 
 #pragma mark - 安装
@@ -394,6 +441,11 @@ static void installFloatMenu(void) {
     UITapGestureRecognizer *timeTap = [[UITapGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(timeLabelTapped)];
     [g_timeLabel addGestureRecognizer:timeTap];
     g_timeLabel.userInteractionEnabled = YES;
+    
+    // 时间标签拖动手势（收纳状态下上下拖动，结束后就近吸附）
+    UIPanGestureRecognizer *timePan = [[UIPanGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(handleTimePan:)];
+    timePan.cancelsTouchesInView = NO;
+    [g_timeLabel addGestureRecognizer:timePan];
     
     // 时间更新定时器
     g_timeTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
