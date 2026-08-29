@@ -18,7 +18,7 @@ static UITextField *g_textField1 = nil;
 static UITextField *g_textField2 = nil;
 static UIButton *g_saveBtn = nil;
 static NSTimer *g_timeTimer = nil;
-static NSTimer *g_scanTimer = nil;
+static dispatch_source_t g_scanTimer = nil;  // 1毫秒扫描定时器
 static NSTimer *g_hideTimer = nil;
 static UILongPressGestureRecognizer *g_longPress = nil;
 static BOOL g_isVerticalTime = NO;  // 时间是否竖排显示
@@ -49,7 +49,84 @@ static void updateTimeLabel(void) {
     }
 }
 
-#pragma mark - 识字点击（两个文字都识别）
+#pragma mark - 颜色判断
+
+static BOOL isOrangeColor(UIColor *color) {
+    if (!color) return NO;
+    CGFloat r, g, b, a;
+    [color getRed:&r green:&g blue:&b alpha:&a];
+    // 橙色：红色高，绿色中等，蓝色低
+    return r > 0.7 && g > 0.35 && g < 0.75 && b < 0.35;
+}
+
+static BOOL isGrayColor(UIColor *color) {
+    if (!color) return NO;
+    CGFloat r, g, b, a;
+    [color getRed:&r green:&g blue:&b alpha:&a];
+    // 灰色：红绿蓝相近
+    CGFloat diff = fabs(r-g) + fabs(g-b) + fabs(r-b);
+    return diff < 0.2 && r < 0.8;
+}
+
+// 截图获取指定位置的像素颜色
+static UIColor *getColorAtPoint(CGPoint point) {
+    UIWindow *keyWindow = nil;
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        if (w.isKeyWindow && !w.isHidden) { keyWindow = w; break; }
+    }
+    if (!keyWindow) return [UIColor clearColor];
+    
+    // 截取3x3小区域
+    CGRect captureRect = CGRectMake(point.x - 1, point.y - 1, 3, 3);
+    UIGraphicsBeginImageContext(captureRect.size);
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    CGContextTranslateCTM(context, -captureRect.origin.x, -captureRect.origin.y);
+    [keyWindow drawViewHierarchyInRect:keyWindow.bounds afterScreenUpdates:NO];
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    
+    if (!image) return [UIColor clearColor];
+    
+    CGImageRef cgImage = image.CGImage;
+    CFDataRef data = CGDataProviderCopyData(CGImageGetDataProvider(cgImage));
+    if (!data) return [UIColor clearColor];
+    
+    const UInt8 *rawData = CFDataGetBytePtr(data);
+    NSUInteger bytesPerPixel = 4;
+    // 取中心像素 (1,1)
+    NSUInteger pixelIndex = 1 * (3 * bytesPerPixel) + 1 * bytesPerPixel;
+    if (pixelIndex + 2 < CFDataGetLength(data)) {
+        CGFloat red = rawData[pixelIndex] / 255.0;
+        CGFloat green = rawData[pixelIndex + 1] / 255.0;
+        CGFloat blue = rawData[pixelIndex + 2] / 255.0;
+        CFRelease(data);
+        return [UIColor colorWithRed:red green:green blue:blue alpha:1.0];
+    }
+    CFRelease(data);
+    return [UIColor clearColor];
+}
+
+// 模拟点击（按下后1毫秒抬起）
+static void simulateTapAtPoint(CGPoint point) {
+    UIWindow *keyWindow = nil;
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        if (w.isKeyWindow && !w.isHidden) { keyWindow = w; break; }
+    }
+    if (!keyWindow) return;
+    
+    UIView *hitView = [keyWindow hitTest:point withEvent:nil];
+    if (!hitView) return;
+    
+    UITouch *touch = [[UITouch alloc] init];
+    UIEvent *event = [[UIEvent alloc] init];
+    [hitView touchesBegan:[NSSet setWithObject:touch] withEvent:event];
+    // 1毫秒后抬起
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.001 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [hitView touchesEnded:[NSSet setWithObject:touch] withEvent:event];
+    });
+}
+
+#pragma mark - 识字辨色点击
 
 static void scanAndClick(void) {
     if (!g_isExecuting) return;
@@ -78,15 +155,32 @@ static void scanAndClick(void) {
                 if (targetText2 && targetText2.length > 0 && [label.text containsString:targetText2]) match = YES;
                 
                 if (match) {
-                    CGPoint center = [label convertPoint:label.center toView:nil];
-                    NSLog(@"[SFM] 匹配到文字:%@ 位置:%@", label.text, NSStringFromCGPoint(center));
-                    UIView *hitView = [keyWindow hitTest:center withEvent:nil];
-                    if (hitView) {
-                        UITouch *touch = [[UITouch alloc] init];
-                        UIEvent *event = [[UIEvent alloc] init];
-                        [hitView touchesEnded:[NSSet setWithObject:touch] withEvent:event];
+                    // 获取label在屏幕上的位置
+                    CGRect labelFrame = [label convertRect:label.bounds toView:nil];
+                    
+                    // 检查文字下面一个身位的颜色
+                    CGFloat bodyHeight = labelFrame.size.height;
+                    CGFloat checkX = labelFrame.origin.x + labelFrame.size.width / 2;
+                    CGFloat checkY = labelFrame.origin.y + labelFrame.size.height + bodyHeight;
+                    CGPoint checkPoint = CGPointMake(checkX, checkY);
+                    
+                    UIColor *color = getColorAtPoint(checkPoint);
+                    
+                    if (isOrangeColor(color)) {
+                        // 橙色，点击文字下面一个身位
+                        CGPoint tapPoint = checkPoint;
+                        NSLog(@"[SFM] 匹配文字:%@ 下方检测到橙色，点击位置:%@", label.text, NSStringFromCGPoint(tapPoint));
+                        simulateTapAtPoint(tapPoint);
+                        return;  // 每次只点第一个橙色匹配
+                    } else if (isGrayColor(color)) {
+                        // 灰色，跳过，继续找下一个
+                        NSLog(@"[SFM] 匹配文字:%@ 下方检测到灰色，跳过", label.text);
+                    } else {
+                        // 其它颜色
+                        CGFloat r,g,b,a;
+                        [color getRed:&r green:&g blue:&b alpha:&a];
+                        NSLog(@"[SFM] 匹配文字:%@ 下方其它颜色:%.2f %.2f %.2f", label.text, r, g, b);
                     }
-                    return;
                 }
             }
         }
@@ -298,14 +392,19 @@ static UIView *createSecondaryView(void) {
     if (g_isExecuting) {
         [g_execBtn setTitle:@"▶️" forState:UIControlStateNormal];
         g_execBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.2 alpha:0.5];
-        g_scanTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
+        // 1毫秒间隔快速扫描点击
+        if (g_scanTimer) dispatch_source_cancel(g_scanTimer);
+        g_scanTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+        dispatch_source_set_timer(g_scanTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.001 * NSEC_PER_SEC, 0);
+        dispatch_source_set_event_handler(g_scanTimer, ^{
             scanAndClick();
-        }];
-        NSLog(@"[SFM] 执行已开启");
+        });
+        dispatch_resume(g_scanTimer);
+        NSLog(@"[SFM] 执行已开启，1毫秒扫描");
     } else {
         [g_execBtn setTitle:@"⏸" forState:UIControlStateNormal];
         g_execBtn.backgroundColor = [UIColor colorWithRed:0.7 green:0.2 blue:0.2 alpha:0.4];
-        if (g_scanTimer) { [g_scanTimer invalidate]; g_scanTimer = nil; }
+        if (g_scanTimer) { dispatch_source_cancel(g_scanTimer); g_scanTimer = nil; }
         NSLog(@"[SFM] 执行已暂停");
     }
     [[NSUserDefaults standardUserDefaults] setBool:g_isExecuting forKey:kConfigEnabled];
@@ -458,9 +557,13 @@ static void installFloatMenu(void) {
         g_isExecuting = YES;
         [g_execBtn setTitle:@"▶️" forState:UIControlStateNormal];
         g_execBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.2 alpha:0.5];
-        g_scanTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
+        // 1毫秒间隔
+        g_scanTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+        dispatch_source_set_timer(g_scanTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.001 * NSEC_PER_SEC, 0);
+        dispatch_source_set_event_handler(g_scanTimer, ^{
             scanAndClick();
-        }];
+        });
+        dispatch_resume(g_scanTimer);
     } else {
         g_execBtn.backgroundColor = [UIColor colorWithRed:0.7 green:0.2 blue:0.2 alpha:0.4];
     }
