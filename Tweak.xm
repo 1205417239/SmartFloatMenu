@@ -440,7 +440,7 @@ static UIView *createSecondaryView(void) {
 #pragma mark - 事件处理
 
 @interface SFMHandler : NSObject
-+ (void)execBtnTapped;
++ (void)execBtnTapped:(id)sender;
 + (void)saveBtnTapped;
 + (void)handleLongPress:(UILongPressGestureRecognizer *)gesture;
 + (void)handlePan:(UIPanGestureRecognizer *)pan;
@@ -450,8 +450,9 @@ static UIView *createSecondaryView(void) {
 
 @implementation SFMHandler
 
-+ (void)execBtnTapped {
++ (void)execBtnTapped:(id)sender {
     g_isExecuting = !g_isExecuting;
+    NSLog(@"[SFM] 执行状态切换: %@", g_isExecuting ? @"开启" : @"暂停");
     if (g_isExecuting) {
         [g_execBtn setTitle:@"▶️" forState:UIControlStateNormal];
         g_execBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.2 alpha:0.5];
@@ -585,14 +586,21 @@ static void installFloatMenu(void) {
     [keyWindow bringSubviewToFront:g_secondaryView];
     
     // 执行按钮点击
-    [g_execBtn addTarget:[SFMHandler class] action:@selector(execBtnTapped) forControlEvents:UIControlEventTouchUpInside];
+    // 执行按钮只用于显示，点击由手势处理
+    // [g_execBtn addTarget:...];  // 移除，避免手势冲突
     
     // 保存按钮
     [g_saveBtn addTarget:[SFMHandler class] action:@selector(saveBtnTapped) forControlEvents:UIControlEventTouchUpInside];
     
+    // 点击手势：切换执行/暂停
+    UITapGestureRecognizer *menuTap = [[UITapGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(execBtnTapped:)];
+    menuTap.cancelsTouchesInView = NO;
+    [g_floatMenu addGestureRecognizer:menuTap];
+    
     // 长按呼出二级菜单
     g_longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(handleLongPress:)];
     g_longPress.minimumPressDuration = 0.6;
+    g_longPress.cancelsTouchesInView = NO;
     [g_floatMenu addGestureRecognizer:g_longPress];
     
     // 拖动手势
