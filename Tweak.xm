@@ -2,6 +2,21 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
+#pragma mark - 独立悬浮Window（点击穿透）
+@interface FloatingOverlayWindow : UIWindow
+@end
+@implementation FloatingOverlayWindow
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *hitView = [super hitTest:point withEvent:event];
+    if (hitView == self) return nil;  // 空白区域穿透到下层App
+    return hitView;
+}
+- (BOOL)_canAffectStatusBarAppearance { return NO; }
+@end
+
+// 全局悬浮Window
+static FloatingOverlayWindow *g_overlayWindow = nil;
+
 // 配置存储 key
 static NSString *const kConfigText1 = @"SFM_configText1";
 static NSString *const kConfigText2 = @"SFM_configText2";
@@ -136,16 +151,11 @@ static void simulateTapAtPoint(CGPoint point) {
 
 static void ensureDebugOverlay(void) {
     if (g_debugOverlay) return;
-    UIWindow *keyWindow = nil;
-    for (UIWindow *w in [UIApplication sharedApplication].windows) {
-        if (w.isKeyWindow && !w.isHidden) { keyWindow = w; break; }
-    }
-    if (!keyWindow) return;
-    g_debugOverlay = [[UIView alloc] initWithFrame:keyWindow.bounds];
+    if (!g_overlayWindow) return;
+    g_debugOverlay = [[UIView alloc] initWithFrame:g_overlayWindow.bounds];
     g_debugOverlay.backgroundColor = [UIColor clearColor];
     g_debugOverlay.userInteractionEnabled = NO;
-    [keyWindow addSubview:g_debugOverlay];
-    [keyWindow bringSubviewToFront:g_debugOverlay];
+    [g_overlayWindow addSubview:g_debugOverlay];
 }
 
 static void showDebugRect(CGRect frame) {
@@ -568,44 +578,39 @@ static UIView *createSecondaryView(void) {
 static void installFloatMenu(void) {
     if (g_floatMenu) return;
     
-    UIWindow *keyWindow = nil;
-    for (UIWindow *w in [UIApplication sharedApplication].windows) {
-        if (w.isKeyWindow && !w.isHidden) { keyWindow = w; break; }
+    // 创建独立悬浮Window（最高层级，点击穿透）
+    if (!g_overlayWindow) {
+        g_overlayWindow = [[FloatingOverlayWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+        g_overlayWindow.windowLevel = UIWindowLevelAlert + 100;
+        g_overlayWindow.hidden = NO;
+        g_overlayWindow.backgroundColor = [UIColor clearColor];
     }
-    if (!keyWindow) return;
+    
+    CGSize screenSize = [UIScreen mainScreen].bounds.size;
     
     // 创建一级菜单
     g_floatMenu = createFloatMenu();
-    g_floatMenu.center = CGPointMake(keyWindow.bounds.size.width - 35, 150);
-    [keyWindow addSubview:g_floatMenu];
-    [keyWindow bringSubviewToFront:g_floatMenu];
+    g_floatMenu.center = CGPointMake(screenSize.width - 35, 150);
+    [g_overlayWindow addSubview:g_floatMenu];
     
     // 创建二级菜单
     g_secondaryView = createSecondaryView();
-    [keyWindow addSubview:g_secondaryView];
-    [keyWindow bringSubviewToFront:g_secondaryView];
-    
-    // 执行按钮点击
-    // 执行按钮只用于显示，点击由手势处理
-    // [g_execBtn addTarget:...];  // 移除，避免手势冲突
+    [g_overlayWindow addSubview:g_secondaryView];
     
     // 保存按钮
     [g_saveBtn addTarget:[SFMHandler class] action:@selector(saveBtnTapped) forControlEvents:UIControlEventTouchUpInside];
     
     // 点击手势：切换执行/暂停
     UITapGestureRecognizer *menuTap = [[UITapGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(execBtnTapped:)];
-    menuTap.cancelsTouchesInView = NO;
     [g_floatMenu addGestureRecognizer:menuTap];
     
     // 长按呼出二级菜单
     g_longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(handleLongPress:)];
     g_longPress.minimumPressDuration = 0.6;
-    g_longPress.cancelsTouchesInView = NO;
     [g_floatMenu addGestureRecognizer:g_longPress];
     
     // 拖动手势
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(handlePan:)];
-    pan.cancelsTouchesInView = NO;
     [g_floatMenu addGestureRecognizer:pan];
     
     // 时间标签点击（收纳状态下呼出）
@@ -613,9 +618,8 @@ static void installFloatMenu(void) {
     [g_timeLabel addGestureRecognizer:timeTap];
     g_timeLabel.userInteractionEnabled = YES;
     
-    // 时间标签拖动手势（收纳状态下上下拖动，结束后就近吸附）
+    // 时间标签拖动手势
     UIPanGestureRecognizer *timePan = [[UIPanGestureRecognizer alloc] initWithTarget:[SFMHandler class] action:@selector(handleTimePan:)];
-    timePan.cancelsTouchesInView = NO;
     [g_timeLabel addGestureRecognizer:timePan];
     
     // 时间更新定时器
@@ -629,7 +633,6 @@ static void installFloatMenu(void) {
         g_isExecuting = YES;
         [g_execBtn setTitle:@"▶️" forState:UIControlStateNormal];
         g_execBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.2 alpha:0.5];
-        // 1毫秒间隔
         g_scanTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
         dispatch_source_set_timer(g_scanTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.001 * NSEC_PER_SEC, 0);
         dispatch_source_set_event_handler(g_scanTimer, ^{
@@ -643,7 +646,7 @@ static void installFloatMenu(void) {
     // 启动自动收纳计时
     resetHideTimer();
     
-    NSLog(@"[SFM] 悬浮菜单已安装");
+    NSLog(@"[SFM] 悬浮菜单已安装（独立Window）");
 }
 
 #pragma mark - Hook
